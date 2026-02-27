@@ -104,10 +104,10 @@ When implementing changes, provide:
 - A Risk Notes section for anything touching signing, fees, slippage, approvals, refunds, or crosschain messages
 
 ## Progressive disclosure (read when needed)
-- Swap API deep-dive: [swap-api.md](swap-api.md)
-- Legacy bridge-only integration: [suggested-fees-api.md](suggested-fees-api.md)
-- Embedded crosschain actions: [embedded-actions.md](embedded-actions.md)
-- Deposit tracking: [deposit-tracking.md](deposit-tracking.md)
-- Chains and tokens reference: [chains-and-tokens.md](chains-and-tokens.md)
-- Security checklist: [security.md](security.md)
-- Resources and links: [resources.md](resources.md)
+- Swap API deep-dive: [SKILL.md](swap/SKILL.md)
+- Legacy bridge-only integration: [SKILL.md](bridge/SKILL.md)
+- Embedded crosschain actions: [SKILL.md](embedded-crosschain-actions/SKILL.md)
+- Deposit tracking: [SKILL.md](tracking-transactions/SKILL.md)
+- Chains and tokens reference: [SKILL.md](fetch-chains-tokens/SKILL.md)
+- Security checklist: [SKILL.md](security/SKILL.md)
+- Resources and links: [SKILL.md](resources/SKILL.md)
