@@ -1,5 +1,5 @@
 ---
-name: across-dev
+name: across-protocol-ai-agent-skill
 description: End-to-end Across Protocol integration playbook. Default to Swap API for all crosschain bridging and swapping. Use App SDK (@across-protocol/app-sdk) when you need programmatic quote/route control in TypeScript. Fall back to suggested-fees API only for custom swap routing or niche bridge-only flows. Covers intent lifecycle, Swap API integration, embedded crosschain actions, deposit tracking, fee collection, and security checklists.
 user-invocable: true
 ---
