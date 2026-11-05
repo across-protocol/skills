@@ -1,17 +1,18 @@
 # Quote and Execute
 
-`POST /v1/quotes` prices one transfer (bridge, crosschain swap or same-chain
-swap) and returns everything needed to execute it. You then complete the
-quote's `nextActions` in order and, when they end with `submit_execution`,
-post the results to `POST /v1/quotes/{orderId}/executions`.
+`POST /v1/quotes` prices one transfer and returns everything needed to execute
+it: the expected and guaranteed amounts, an itemised fee, `expiresAt`, and the
+ordered `nextActions`. Complete `nextActions` in order; only when they end
+with `submit_execution`, post the results to
+`POST /v1/quotes/{orderId}/executions`.
 
-Never use the legacy `/swap/approval`, `/suggested-fees` or `/swap/gasless`
-for this. See [SKILL.md](../SKILL.md#rule-zero-never-use-the-legacy-apis).
+A quote is an offer, not a commitment. Never use legacy endpoints for any of
+this (see [SKILL.md](../SKILL.md#rule-zero-use-only-these-endpoints)).
 
 ## Base URL and auth
 - `https://api.across.to`
-- `Authorization: Bearer <API key>` and `Content-Type: application/json`
-- Bodies are strict: an unknown field returns `400 request.unsupported_param`.
+- `Authorization: Bearer <API key>`, `Content-Type: application/json`
+- The body is strict: an unrecognised field returns `400 request.unsupported_param`.
 
 ## POST /v1/quotes
 
@@ -19,91 +20,90 @@ for this. See [SKILL.md](../SKILL.md#rule-zero-never-use-the-legacy-apis).
 
 | Field | Required | Description |
 |---|---|---|
-| `origin.token` | yes | `{ chainId, address }` of the input token. Native: `0x0000000000000000000000000000000000000000` (EVM), `11111111111111111111111111111111` (Solana) |
-| `origin.depositor` | yes | Wallet that funds the transfer. It must also be the wallet that sends any `send_transaction` action |
-| `origin.amount` | for `exact_input` | Input in base units, decimal string |
+| `origin.token` | yes | `{ chainId, address }` of the input token |
+| `origin.depositor` | yes | Wallet that funds the transfer |
+| `origin.amount` | `exact_input` | Input in base units (uint256 decimal string) |
 | `destination.token` | yes | `{ chainId, address }` of the output token |
-| `destination.recipient` | yes | Address receiving the output |
-| `destination.amount` | for `exact_output` / `min_output` | Output in base units |
-| `destination.refundAddress` | no | Who receives a destination-chain refund (the bridged token). Defaults to the recipient. EVM destinations only |
+| `destination.recipient` | yes | Address that receives the output |
+| `destination.amount` | `exact_output`, `min_output` | Output in base units |
+| `destination.refundAddress` | no | Who receives a destination-chain refund (paid in the bridged token). Defaults to the recipient. EVM destinations only (HyperCore and Lighter included) |
 | `amountType` | no | `exact_input` (default), `exact_output`, `min_output` |
-| `capabilities.operations` | no | What the client can do: `[{ "kind": "approve_token" \| "sign_typed_data" \| "send_transaction" \| "sign_transaction", "ecosystem": "evm" \| "solana" \| "tron" }, { "kind": "submit_execution" }]`. The server only offers funding methods the client can complete |
-| `authorizationPolicy.allowedTypes` | no | Subset of `approval`, `permit2`, `erc3009`, `hypercore_action`, `spl_delegate` |
-| `authorizationPolicy.approvalAmount` | no | `exact` or `infinite` (default). Prefer `exact` |
-| `maxFee` | no | `{ bps, fixedUsd }`: the most USD value the user can lose to fees, app fee and slippage combined. Default allows 50% of input. Not a slippage value |
-| `appFeeBps` | no | Your fee in basis points of the input value (`100` = 1%). Needs activation by Across; paid out to you monthly |
-| `gasTopUp.amount` | no | Destination native-token amount (base units) to deliver alongside the transfer. See `capabilities.gasTopUp` for the maximum |
+| `capabilities.operations` | no | What your client can do: `{ "kind": "approve_token" \| "sign_typed_data" \| "send_transaction" \| "sign_transaction", "ecosystem": "evm" \| "solana" \| "tron" }` entries, plus `{ "kind": "submit_execution" }`. The server derives the funding methods from these. Omit only if the client can perform every operation on the origin chain's ecosystem |
+| `authorizationPolicy.allowedTypes` | no | Which authorizations you permit: `approval`, `permit2`, `erc3009`, `hypercore_action`, `spl_delegate`. `permit2` also needs `approval` |
+| `authorizationPolicy.approvalAmount` | no | `exact` (the funded cap) or `infinite` (default, `MAX_UINT256`) |
+| `maxFee` | no | `{ bps, fixedUsd }`: the most USD value the user can lose between expected input and guaranteed output (fees, app fee, swap impact and slippage). `bps` defaults to 5000 (50%) without an integrator override; `fixedUsd` defaults to `0`, max `99.99`. Over the limit: `400 policy.amount_out_of_range` |
+| `appFeeBps` | no | Your fee in basis points of the input value, taken in the destination token (`10` on 1,000 USDC = 1 USDC). Needs activation by Across; above your entitlement returns `400 request.invalid_field`. Not on same-chain swaps |
+| `gasTopUp.amount` | no | Destination native gas (wei) delivered to the recipient. Check `capabilities.gasTopUp` for support and the maximum |
 | `destinationActions` | no | Contract calls on the destination chain. See [embedded-crosschain-actions](../embedded-crosschain-actions/SKILL.md) |
-| `externalId` | no | Your reconciliation id (1 to 256 chars). Filterable on `GET /v1/transfers` |
-| `metadata` | no | Up to 16 string key/values, surfaced on the transfer |
-| `attestation.verifier` | no | Opt in to an Across-signed EIP-712 attestation over the quote terms |
-| `origin.minInputAmount` | no | Minimum-input quote for contracts that pre-swap on origin. Needs the `min-input-quote` permission |
+| `externalId` | no | Your reconciliation id (1 to 256 chars), echoed on the transfer |
+| `metadata` | no | Up to 16 string key/value pairs |
+| `attestation.verifier` | no | Opt in to an Across-signed EIP-712 attestation over the quote's terms |
+| `origin.minInputAmount` | no | Minimum-input quote for integrators that run their own origin action first. Needs the `min-input-quote` permission (`403 permission.not_entitled` otherwise) |
+| `origin.feePayer` | no | Solana origins only: account that pays the fee and deposit rent. Defaults to the depositor |
 
-Do not send `slippageBps`; it is a legacy compatibility field and cannot be
-combined with `maxFee`.
+`slippageBps` is a legacy field kept for compatibility. Do not use it; use
+`maxFee` (the two cannot be combined).
 
 ### Response (key fields)
 
 | Field | Meaning |
 |---|---|
-| `orderId` | The id to execute against and to track. Save it |
-| `expiresAt` | Quote expiry (RFC 3339 UTC). Execute before it; re-quote after it |
-| `originValidUntil` | Last instant the origin deposit may land on chain. Not a failure deadline for crosschain transfers |
-| `expectedFillTimeMs` | Estimate only, not an SLA. Never mark a transfer failed when it elapses |
-| `origin.amount`, `origin.maxAmount` | Expected and maximum spend |
+| `orderId` | Path id for the executions call and the id to track. Save it |
+| `expiresAt` | Quote expiry (RFC 3339, UTC). Quotes expire about 15 minutes after issue |
+| `originValidUntil` | Last instant the origin deposit may land. On crosschain routes the destination can still execute after it, so it is not a failure deadline |
+| `expectedFillTimeMs` | Indicative, not an SLA, and not proof of failure when it passes |
+| `origin.amount`, `origin.maxAmount` | Expected spend; `maxAmount` is what the funding authorization covers |
 | `destination.amount` | Expected delivery |
-| `destination.minAmount` | Guaranteed minimum delivery. Show this as the floor |
-| `fee.transferFee`, `fee.appFee`, `fee.totalFee`, `fee.maxTransferFee`, `fee.maxTotalFee` | Fee breakdown in the destination token (`amount` in base units, `amountUsd`). A missing `amount` means "not stateable", not zero |
-| `gasEstimates[]` | Gas the wallet pays itself (`effect: "paid_by_wallet"`) vs gas already in the fee (`included_in_transfer_fee`). Empty does not mean free |
-| `refundPolicy` | `supported: true` with refund token/address, or `supported: false` with a `reason` (for example `irreversible_rail`). Show it before the user signs |
+| `destination.minAmount` | Guaranteed floor. Show this as the minimum the user receives |
+| `fee` | `transferFee`, `appFee`, `totalFee` (expected) and `maxTransferFee`, `maxTotalFee` (worst case), in the destination token with `amount` and `amountUsd`. A missing `amount` is never a zero |
+| `gasEstimates[]` | `paid_by_wallet` (gas the user's wallet pays on top) vs `included_in_transfer_fee`. `[]` does not mean free |
+| `refundPolicy` | `supported: true` with refund `token`, `refundAddress`, `expectedRefundTimeMs`, or `supported: false` with a `reason` (`irreversible_rail`, ...). Show it before the user signs |
 | `refundTo[]` | Every token/chain/address a refund could arrive in (advisory) |
-| `nextActions[]` | Ordered steps to complete |
-| `attestation` | Present only if requested |
+| `nextActions[]` | The ordered steps to complete |
+| `gasTopUp`, `attestation` | Present only when requested |
 
 The auction sets the final price: delivery can land above
-`destination.amount` and never below `destination.minAmount`.
+`destination.amount`, never below `destination.minAmount`.
 
 ## nextActions
 
 Check the whole list before the first wallet prompt, so you never start a plan
-the client cannot finish. Then complete it in order, dispatching on `kind`:
+the client cannot finish. Then work through it in order, dispatching on `kind`:
 
-| `kind` | `id` values | What to do |
+| `kind` | `id` | What to do |
 |---|---|---|
-| `approve_token` | `approval`, `approval-reset` | ERC-20 `approve(spender, amount)` on `tokenAddress` on `chainId`. `approval-reset` sets the allowance to 0 first (tokens like USDT). Wait for the receipt |
-| `sign_typed_data` | `funding`, `hypercore-transfer` | Sign `typedData` verbatim with `eth_signTypedData_v4` on `chainId`. Keep the signature keyed by `id`. `signerRequirement: "eoa"` means a smart-contract wallet cannot sign it |
-| `send_transaction` (EVM / Tron) | `prefunded-store`, `swap-execute` | Send `{ to, data, value }` on `chainId` from `origin.depositor`. Wait for the receipt and keep the hash |
-| `send_transaction` (Solana, `ecosystem: "solana"`) | `spl-delegate-approve`, `svm-prefunded-store` | Build a transaction from `instructions` with your own recent blockhash, `feePayer` as fee payer, sign and broadcast it **once** (a second copy deposits again). Keep the signature |
-| `sign_transaction` (Solana) | `svm-prefunded-store` | Sponsored flow (`sponsoredBy: "across"`): add the depositor's signature to `transaction` (base64) without modifying it. Do not broadcast. Re-quote past `lastValidBlockHeight` |
+| `approve_token` | `approval`, `approval-reset` | ERC-20 `approve(spender, amount)` on `tokenAddress`, on `chainId`. `approval-reset` is the reset to zero that USDT-class tokens need first. Wait for the receipt |
+| `sign_typed_data` | `funding`, `hypercore-transfer` | Sign `typedData` verbatim with `eth_signTypedData_v4`. Keep the signature keyed by the action's `id` (read it off the action, don't hardcode it). `signerRequirement: "eoa"` means a contract-account signature is rejected |
+| `send_transaction` (EVM) | `prefunded-store`, `swap-execute` | Broadcast `{ to, data, value }` on `chainId`. `prefunded-store` deposits an approval-funded transfer; `swap-execute` is a same-chain swap that completes when it lands |
+| `send_transaction` (`ecosystem: "solana"`) | `spl-delegate-approve` | Wallet-paid Solana transaction built from `instructions`, with `feePayer`. Sign and broadcast it; keep the signature |
+| `sign_transaction` | `spl-delegate-approve` | Sponsored Solana flow (`sponsoredBy: "across"`): add the depositor's signature to `transaction` (base64) without modifying it, and do not broadcast it. Re-quote after `lastValidBlockHeight` |
 | `submit_execution` | `submit-execution` | Always last. `inputs` lists the ids of earlier actions whose results to submit. Call the executions endpoint |
 
-If `nextActions` has no `submit_execution`, there is nothing to POST. For
-example, an approval-funded quote ends with a `prefunded-store` (or
-`svm-prefunded-store`) transaction; once it lands, Across picks the deposit up
-on chain and the transfer starts. Track `orderId`. A POST for such a quote can
-answer `400`; that is not a failed deposit, so do not re-quote or deposit again.
+No `submit_execution` means nothing to POST. An approval-funded quote ends
+with a `prefunded-store` transaction; once it lands, Across picks up the
+deposit on chain and the transfer starts. A same-chain `swap-execute` is not
+submitted either. Track `orderId` in both cases.
 
 ## POST /v1/quotes/{orderId}/executions
 
-Send exactly one `authorization` arm:
+Call it only when `nextActions` ends with `submit_execution`, and before
+`expiresAt`. Send one `authorization` arm:
 
 | Arm | When |
 |---|---|
-| `{ "signatures": { "<action id>": "0x..." } }` | The quote has `sign_typed_data` actions. Include an entry for every one of them, keyed by its `id` |
-| `{ "txnRef": "0x..." }` | `submit_execution.inputs` names a transaction action, for example the Solana `spl-delegate-approve` signature (base58 or 0x-hex) |
+| `{ "signatures": { "<action id>": "0x..." } }` | The quote asked for signatures. One entry for exactly each `sign_typed_data` action, keyed by its `id`. An empty map is correct when `submit_execution` has empty `inputs` |
+| `{ "txnRef": "..." }` | A transaction reference: the Solana signature for an `spl_delegate` quote (base58 or 0x-hex). Optional for a `prefunded-store` quote, which starts on its own |
 | `{ "signedTransaction": "<base64>" }` | Sponsored Solana quotes (`sponsoredBy: "across"`) |
 
-Response: `{ orderId, acceptedAt }`. A 2xx means accepted, not delivered.
-Track it with `GET /v1/transfers/{orderId}`.
+Response: `{ orderId, acceptedAt }`. A 2xx means accepted, not arrived; track
+it with `GET /v1/transfers/{orderId}`.
 
-Retry rules:
-- `conflict.quote_expired` or past `expiresAt`: request a new quote. Do not
-  retry the execution.
+- Quote expired: request a new quote; do not retry the execution.
+- `400 execution.invalid_signature`: the message names the action ids the
+  quote expects.
+- `400 SPONSORED_TRANSACTION_EXPIRED` (sponsored Solana): re-quote.
 - `409 conflict.submission_state_unknown`: retry the same request with
-  backoff. Do not re-quote.
-- `execution.invalid_signature`, `execution.insufficient_balance`,
-  `execution.insufficient_allowance`: fix the cause; re-quote if `expiresAt`
-  has passed.
+  backoff; never re-quote.
 
 ## End-to-end example: 1 USDC Arbitrum → Base (viem)
 
@@ -142,7 +142,7 @@ const quote = await across("/v1/quotes", {
   body: JSON.stringify({
     origin: {
       token: { chainId: 42161, address: USDC_ARBITRUM },
-      amount: "1000000", // 1 USDC (6 decimals)
+      amount: "1000000", // 1 USDC, 6 decimals
       depositor: account.address,
     },
     destination: {
@@ -163,7 +163,7 @@ const quote = await across("/v1/quotes", {
   }),
 });
 
-// 2. Check every action before prompting the wallet: a kind this client supports,
+// 2. Check every action before the first wallet prompt: a kind this client supports,
 //    on the wallet's chain, approving only the quoted token up to origin.maxAmount
 const supported = new Set(["approve_token", "sign_typed_data", "send_transaction", "submit_execution"]);
 for (const a of quote.nextActions) {
@@ -184,8 +184,7 @@ for (const a of quote.nextActions) {
 
 // 3. Complete nextActions in order
 const signatures: Record<string, `0x${string}`> = {};
-const txHashes: Record<string, `0x${string}`> = {};
-let submit: { inputs: string[] } | undefined;
+let submit = false;
 for (const a of quote.nextActions) {
   if (a.kind === "approve_token") {
     const hash = await wallet.writeContract({
@@ -200,42 +199,25 @@ for (const a of quote.nextActions) {
   } else if (a.kind === "send_transaction") {
     const hash = await wallet.sendTransaction({ to: a.to, data: a.data, value: BigInt(a.value) });
     await client.waitForTransactionReceipt({ hash });
-    txHashes[a.id] = hash;
   } else if (a.kind === "submit_execution") {
-    submit = a;
+    submit = true;
   }
 }
 
-// 4. Submit only when asked
+// 4. Submit only when the quote asks for it
 if (submit) {
-  const txInput = submit.inputs.find((id) => txHashes[id]);
-  const authorization = txInput ? { txnRef: txHashes[txInput] } : { signatures };
   await across(`/v1/quotes/${quote.orderId}/executions`, {
     method: "POST",
-    body: JSON.stringify({ authorization }),
+    body: JSON.stringify({ authorization: { signatures } }),
   });
 }
 
 // 5. Track quote.orderId (see tracking-transactions)
 ```
 
-## Variants
-
-- **Gasless**: a signature-funded quote (`permit2` or `erc3009`) has the user
-  sign instead of sending a transaction; origin gas is in the fee. Permit2 may
-  need a one-time approval first.
-- **Approval-only clients**: declare `approve_token` + `send_transaction` and
-  `allowedTypes: ["approval"]`. Expect `approve_token` (if needed), then a
-  `prefunded-store` transaction, and no `submit_execution`.
-- **Same-chain swap**: same call with origin and destination on one chain. Its
-  `orderId` is a hash of the swap calldata; `originValidUntil` is a hard
-  deadline here.
-- **Gas top-up**: set `gasTopUp.amount`; part of the input buys destination
-  native gas, so the token output is lower.
-
 ## Errors
 
-Two envelopes. Read `error.code`, fall back to the top-level `code`:
+Two envelopes. Read `error.code`, and fall back to the top-level `code`:
 
 ```json
 { "code": "unauthenticated", "message": "AUTH_INVALID", "details": null }
@@ -246,12 +228,12 @@ Two envelopes. Read `error.code`, fall back to the top-level `code`:
 
 | Situation | Result |
 |---|---|
-| Missing, wrong, revoked or expired API key | `401` flat `unauthenticated` |
-| Unknown field or param | `400 request.unsupported_param` |
-| Field not allowed for your key (for example `appFeeBps` above your entitlement) | `400 request.invalid_field` with `param` |
-| Amount too small/large, or fee above `maxFee` | `400 policy.amount_out_of_range` (`details.amountLimits` when a bound is stateable) |
+| Missing or invalid API key | `401`, flat `unauthenticated` |
+| Unrecognised body or query field | `400 request.unsupported_param`, naming the field |
+| Field not allowed for your key (for example `appFeeBps`) | `400 request.invalid_field` with `param` |
+| Amount the route cannot clear, or fee above `maxFee` | `400 policy.amount_out_of_range` |
 | Feature needs a permission | `403 permission.not_entitled` |
-| No route | `not_found.route` |
-| Rate limited | `429` flat |
+| Quote past its expiry | Re-quote; do not retry the execution |
+| Too many requests | `429`, flat gateway shape |
 
-Quote `requestId` in support requests.
+Quote `error.requestId` in support requests.

@@ -1,33 +1,26 @@
 # Destination Actions
 
-Run contract calls on the destination chain with the bridged funds (deposit
-into a lending pool, wrap, stake, send to another address) by adding
-`destinationActions` to `POST /v1/quotes`. Never use the legacy
-`POST /swap/approval` with an `actions` body.
+Run contract calls on the destination chain with the bridged funds (for
+example supply USDC to Aave on Base, or wrap USDC.e into pUSD on Polygon) by
+adding `destinationActions` to `POST /v1/quotes`. Everything else about the
+quote, its execution and tracking is unchanged
+([quote-and-execute](../quote-and-execute/SKILL.md)).
 
-For a plain "send to a different address", you do not need actions: set
+To simply deliver to another address, you don't need actions: set
 `destination.recipient`.
 
-## How it works
-1. Add `destinationActions` to the quote request. Everything else is a normal
-   quote.
-2. Complete `nextActions` and execute as usual
-   ([quote-and-execute](../quote-and-execute/SKILL.md)).
-3. On the destination chain the steps run in order, in the same transaction as
-   the fill, against the delivered output (after any app fee).
-
-## Request shape
+## Example: bridge USDC from Arbitrum, supply it to Aave on Base
 
 ```json
 {
   "origin": {
     "token": { "chainId": 42161, "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
     "amount": "5000000",
-    "depositor": "0xUser"
+    "depositor": "0xYourWalletAddress"
   },
   "destination": {
     "token": { "chainId": 8453, "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
-    "recipient": "0xUser"
+    "recipient": "0xYourWalletAddress"
   },
   "amountType": "exact_input",
   "maxFee": { "bps": 100 },
@@ -46,7 +39,7 @@ For a plain "send to a different address", you do not need actions: set
         "args": [
           { "value": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
           { "populateDynamically": true, "balanceSourceToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
-          { "value": "0xUser" },
+          { "value": "0xYourWalletAddress" },
           { "value": 0 }
         ]
       }
@@ -56,51 +49,50 @@ For a plain "send to a different address", you do not need actions: set
 }
 ```
 
-This bridges 5 USDC from Arbitrum, approves the Aave v3 Pool on Base and calls
-`supply` with the delivered balance. The aTokens go to `0xUser` because it is
-the `onBehalfOf` argument. `maxFee` caps the user's total value loss at 1%;
-set it explicitly on every quote, with a bound the user agreed to (omitting it
-allows up to 50%).
+The aTokens are minted to `0xYourWalletAddress` because it is the `onBehalfOf`
+argument of `supply`. `maxFee` caps the user's value loss at 1%; set it on
+every quote.
 
-## Step kinds
+## Steps
+
+Steps run in order, in the same transaction as the fill, against the output
+after any app fee.
 
 | `kind` | Fields | What it does |
 |---|---|---|
-| `approve` | `token`, `spender`, `amount` or `populateDynamically: true` | Lets `spender` pull `token` |
-| `function-call` | `target`, `functionSignature`, `args[]`, optional `value`, `populateCallValueDynamically` | Calls `target`; arguments are ABI-encoded from the signature |
-| `raw-call` | `target`, `calldata`, optional `value` | Calls `target` with calldata you encoded |
-| `native-transfer` | `target`, `value` or `populateCallValueDynamically: true` | Sends the chain's native token to `target` |
+| `approve` | `token`, `spender`, and `amount` or `populateDynamically: true` | Lets `spender` (usually the next step's `target`) pull `token` |
+| `function-call` | `target`, `functionSignature`, `args[]`, optional `value` or `populateCallValueDynamically: true` | Calls `target`; one `args` entry per input of `functionSignature`, in order |
+| `raw-call` | `target`, `calldata` (selector included), optional `value` | Calls `target` with calldata you encoded |
+| `native-transfer` | `target`, and `value` or `populateCallValueDynamically: true` | Sends the chain's native token to `target` |
 
-`args[]` entries are either `{ "value": <static value> }` or
-`{ "populateDynamically": true, "balanceSourceToken": "0xToken" }`, which uses
-the balance that actually arrived. `value` and `amount` are wei/base-unit
-decimal strings.
+`args[]` entries are `{ "value": ... }` for a fixed value, or
+`{ "populateDynamically": true, "balanceSourceToken": "0xToken" }` to use the
+amount of that token that arrived. `value` and `amount` are wei/base-unit
+strings.
 
 ## onFailure
 
-| `action` | Result when any step fails |
+| `action` | If a step fails |
 |---|---|
-| `revert` (default) | The fill does not happen and the transfer is refunded (in the bridged token) |
-| `deliver-output-token` | The bridged token goes to `onFailure.recipient` instead |
+| `revert` (default) | The fill doesn't happen and the transfer is refunded |
+| `deliver-output-token` | The fill still happens and the bridged token goes to `onFailure.recipient` (an EVM address on the destination chain). Anything left over after successful steps goes there too |
 
-When the quote also uses `attestation` or `gasTopUp`, `onFailure.recipient`
-must equal `destination.recipient`.
+With `attestation` or `gasTopUp`, `onFailure.recipient` must equal
+`destination.recipient`. A gas top-up is delivered before the steps run.
 
 ## Tracking
 
-`GET /v1/transfers/{orderId}` reports `status.reason`
-`filled_destination_action_successful` or `filled_destination_action_failed`.
-See [tracking-transactions](../tracking-transactions/SKILL.md).
+A completed transfer with destination actions reports `status.reason`
+`filled_destination_action_successful` or `filled_destination_action_failed`
+on `GET /v1/transfers/{orderId}`.
 
 ## Rules
-- **Funds go wherever your steps send them**, not automatically to
-  `destination.recipient`. Pass the user's address explicitly (as the
-  `onBehalfOf`, recipient or `to` argument).
-- **Use `populateDynamically`** for amounts; the delivered amount is only known
-  at fill time. Static amounts risk reverting or leaving dust.
+- **Funds go wherever your steps send them**, not to
+  `destination.recipient`. Pass the user's address explicitly (for example as
+  `onBehalfOf` or the recipient argument).
+- **Use `populateDynamically`** on the step that spends the funds, so it uses
+  the full amount that arrived.
 - **Validate every `target` and `spender`.** Never let end users supply
   arbitrary targets or calldata.
-- **Order matters.** Steps run in array order; approve before the call that
-  pulls.
-- **Set `destination.refundAddress`** if the recipient cannot handle the
-  bridged token that a failed action would refund.
+- **A failed action refunds the bridged token**, not the token the user
+  wanted. Set `destination.refundAddress` if the recipient cannot receive it.
