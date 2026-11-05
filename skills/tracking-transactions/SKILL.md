@@ -50,7 +50,8 @@ Show progress from `isTerminal`. Act on the outcome in any way you cannot undo
 const BASE_URL = "https://api.across.to";
 const API_KEY = process.env.ACROSS_API_KEY!;
 
-async function track(orderId: string) {
+async function track(orderId: string, notFoundTimeoutMs = 120_000) {
+  const start = Date.now();
   while (true) {
     const res = await fetch(`${BASE_URL}/v1/transfers/${orderId}`, {
       headers: { Authorization: `Bearer ${API_KEY}` },
@@ -59,13 +60,24 @@ async function track(orderId: string) {
       const transfer = await res.json();
       const { isTerminal, finalized } = transfer.status;
       if (isTerminal && finalized) return transfer;
+    } else if (res.status === 404) {
+      // Not indexed yet right after execution; give up if it persists
+      if (Date.now() - start > notFoundTimeoutMs) throw new Error(`transfer ${orderId} not found`);
+    } else if (res.status !== 429 && res.status < 500) {
+      // 400, 401 (missing, revoked or expired key), 403: retrying will not help
+      const body = await res.json().catch(() => null);
+      throw new Error(`${res.status} ${body?.error?.code ?? body?.code}`);
     }
-    await new Promise((r) => setTimeout(r, 5_000));
+    // pending, 429 or 5xx: wait and poll again, slower when throttled or erroring
+    const delay = res.status === 429 || res.status >= 500 ? 30_000 : 5_000;
+    await new Promise((r) => setTimeout(r, delay));
   }
 }
 ```
 
-- Poll about every 5 seconds.
+- Poll about every 5 seconds. Back off on `429` and `5xx`; stop on any other
+  `4xx` (for example a `401` from a missing or revoked key) instead of
+  retrying forever.
 - Treat a `404` right after execution as not yet visible and keep polling for
   a bounded time. A `404` that persists means a wrong `orderId` or another
   integrator's key.
@@ -121,10 +133,15 @@ Headers: `webhook-id`, `webhook-timestamp`, `webhook-signature`.
 Handling rules:
 - **Verify** every delivery with a [Standard Webhooks](https://www.standardwebhooks.com)
   library, against the raw body, before parsing.
-- **Acknowledge first** with a `2xx`, then process. Failures are retried with
-  backoff.
+- **Persist, then acknowledge.** Durably store or enqueue the verified event,
+  then return `2xx` (within 10 seconds) and process it from your queue. If you
+  cannot store it, return a non-`2xx` so it is retried with backoff; a `2xx`
+  for an event you then lose is never redelivered.
 - **Deduplicate on `webhook-id`**; delivery is at least once.
-- **Don't rely on order**; read `status` from each event.
+- **Don't rely on order.** Deliveries can arrive late or out of order, so never
+  overwrite stored state with a delivery's `status` as-is. Treat the event as
+  a trigger and re-fetch `GET /v1/transfers/{orderId}` before updating, or
+  skip events whose `payload.timestamp` is older than the one you stored.
 - **Wait for `finalized: true`** before irreversible actions.
 - No test events are sent, and changes made while a webhook is paused are not
   replayed.

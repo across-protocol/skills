@@ -29,6 +29,8 @@ For a plain "send to a different address", you do not need actions: set
     "token": { "chainId": 8453, "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
     "recipient": "0xUser"
   },
+  "amountType": "exact_input",
+  "maxFee": { "bps": 100 },
   "destinationActions": {
     "steps": [
       {
@@ -56,7 +58,9 @@ For a plain "send to a different address", you do not need actions: set
 
 This bridges 5 USDC from Arbitrum, approves the Aave v3 Pool on Base and calls
 `supply` with the delivered balance. The aTokens go to `0xUser` because it is
-the `onBehalfOf` argument.
+the `onBehalfOf` argument. `maxFee` caps the user's total value loss at 1%;
+set it explicitly on every quote, with a bound the user agreed to (omitting it
+allows up to 50%).
 
 ## Step kinds
 

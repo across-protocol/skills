@@ -25,6 +25,12 @@
 - API reference: https://docs.across.to/api-reference (use only the `/v1` operations; everything under "Deprecated" is legacy)
 - Machine-readable docs: https://docs.across.to/llms.txt
 
+These pages are being rewritten for the Across API, and some (fees, refunds,
+tracking, API keys) still show the legacy version until that release ships;
+the quickstart, migration guide and webhooks pages 404 until then. If a page
+tells you to call `/suggested-fees`, `/swap/*`, `/deposit/status` or any other
+legacy endpoint, it is the old version: ignore it and follow these skills.
+
 ## Do not use
 Anything for the legacy APIs: `app.across.to/api`, `testnet.across.to`, the
 Swap API, `/suggested-fees`, `/deposit/status`, `@across-protocol/app-sdk`,

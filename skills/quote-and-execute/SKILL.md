@@ -114,6 +114,7 @@ import { privateKeyToAccount } from "viem/accounts";
 
 const BASE_URL = "https://api.across.to";
 const API_KEY = process.env.ACROSS_API_KEY!; // server-side only
+const USDC_ARBITRUM = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
 const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
 const wallet = createWalletClient({ account, chain: arbitrum, transport: http() });
 const client = createPublicClient({ chain: arbitrum, transport: http() });
@@ -140,7 +141,7 @@ const quote = await across("/v1/quotes", {
   method: "POST",
   body: JSON.stringify({
     origin: {
-      token: { chainId: 42161, address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" }, // USDC
+      token: { chainId: 42161, address: USDC_ARBITRUM },
       amount: "1000000", // 1 USDC (6 decimals)
       depositor: account.address,
     },
@@ -162,7 +163,8 @@ const quote = await across("/v1/quotes", {
   }),
 });
 
-// 2. Check every action is one this client supports before prompting the wallet
+// 2. Check every action before prompting the wallet: a kind this client supports,
+//    on the wallet's chain, approving only the quoted token up to origin.maxAmount
 const supported = new Set(["approve_token", "sign_typed_data", "send_transaction", "submit_execution"]);
 for (const a of quote.nextActions) {
   if (!supported.has(a.kind) || (a.ecosystem && a.ecosystem !== "evm")) {
@@ -170,6 +172,13 @@ for (const a of quote.nextActions) {
   }
   if (a.kind !== "submit_execution" && a.chainId !== arbitrum.id) {
     throw new Error(`action ${a.id} targets chain ${a.chainId}, wallet is on ${arbitrum.id}`);
+  }
+  if (
+    a.kind === "approve_token" &&
+    (a.tokenAddress.toLowerCase() !== USDC_ARBITRUM.toLowerCase() ||
+      BigInt(a.amount) > BigInt(quote.origin.maxAmount))
+  ) {
+    throw new Error(`approval ${a.id} does not match the quoted token and amount`);
   }
 }
 
