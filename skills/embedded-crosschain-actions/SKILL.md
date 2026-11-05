@@ -1,88 +1,102 @@
-# Embedded Crosschain Actions
+# Destination Actions
 
-Embedded actions let you execute contract calls on the destination chain immediately after a bridge/swap using `POST /swap/approval`. This is useful for minting, staking, or depositing into a protocol as part of the same user flow.
+Run contract calls on the destination chain with the bridged funds (deposit
+into a lending pool, wrap, stake, send to another address) by adding
+`destinationActions` to `POST /v1/quotes`. Never use the legacy
+`POST /swap/approval` with an `actions` body.
+
+For a plain "send to a different address", you do not need actions: set
+`destination.recipient`.
 
 ## How it works
-1. Submit `POST /swap/approval` with an `actions` array in the JSON body. All the same query parameters as `GET /swap/approval` apply (`tradeType`, `amount`, `inputToken`, `outputToken`, `originChainId`, `destinationChainId`, `depositor`, etc.).
-2. The swap and bridge execute.
-3. Actions execute on the destination chain in the order provided.
+1. Add `destinationActions` to the quote request. Everything else is a normal
+   quote.
+2. Complete `nextActions` and execute as usual
+   ([quote-and-execute](../quote-and-execute/SKILL.md)).
+3. On the destination chain the steps run in order, in the same transaction as
+   the fill, against the delivered output (after any app fee).
 
-## Action Object Structure
+## Request shape
 
 ```json
 {
-  "actions": [
-    {
-      "target": "0x...",
-      "functionSignature": "function transfer(address,uint256)",
-      "args": [
-        {
-          "value": "0xRecipientAddress",
-          "populateDynamically": false
-        },
-        {
-          "value": "0",
-          "populateDynamically": true,
-          "balanceSourceToken": "0xTokenAddress"
-        }
-      ],
-      "value": "0",
-      "isNativeTransfer": false
-    }
-  ]
+  "origin": {
+    "token": { "chainId": 42161, "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
+    "amount": "5000000",
+    "depositor": "0xUser"
+  },
+  "destination": {
+    "token": { "chainId": 8453, "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+    "recipient": "0xUser"
+  },
+  "destinationActions": {
+    "steps": [
+      {
+        "kind": "approve",
+        "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "spender": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
+        "populateDynamically": true
+      },
+      {
+        "kind": "function-call",
+        "target": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
+        "functionSignature": "supply(address,uint256,address,uint16)",
+        "args": [
+          { "value": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+          { "populateDynamically": true, "balanceSourceToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+          { "value": "0xUser" },
+          { "value": 0 }
+        ]
+      }
+    ],
+    "onFailure": { "action": "revert" }
+  }
 }
 ```
 
-## Field Reference
+This bridges 5 USDC from Arbitrum, approves the Aave v3 Pool on Base and calls
+`supply` with the delivered balance. The aTokens go to `0xUser` because it is
+the `onBehalfOf` argument.
 
-| Field | Description |
-|-------|-------------|
-| `target` | Target contract address for the action |
-| `functionSignature` | Function signature to call (for example, `function transfer(address,uint256)`) |
-| `args[]` | Array of function arguments |
-| `args[].value` | Static value for the argument |
-| `args[].populateDynamically` | If true, populate the argument at execution time |
-| `args[].balanceSourceToken` | Token address to source the balance from (required when `populateDynamically` is true) |
-| `value` | Native token value (wei) to send with the call |
-| `isNativeTransfer` | If true, execute a native token transfer instead of a contract call |
+## Step kinds
 
-## Dynamic Argument Population
-When `populateDynamically` is true, the argument value is populated using the balance of `balanceSourceToken` at execution time. Use this when you want the action to consume the full swapped balance of a token.
+| `kind` | Fields | What it does |
+|---|---|---|
+| `approve` | `token`, `spender`, `amount` or `populateDynamically: true` | Lets `spender` pull `token` |
+| `function-call` | `target`, `functionSignature`, `args[]`, optional `value`, `populateCallValueDynamically` | Calls `target`; arguments are ABI-encoded from the signature |
+| `raw-call` | `target`, `calldata`, optional `value` | Calls `target` with calldata you encoded |
+| `native-transfer` | `target`, `value` or `populateCallValueDynamically: true` | Sends the chain's native token to `target` |
 
-## Common Patterns
+`args[]` entries are either `{ "value": <static value> }` or
+`{ "populateDynamically": true, "balanceSourceToken": "0xToken" }`, which uses
+the balance that actually arrived. `value` and `amount` are wei/base-unit
+decimal strings.
 
-### Transfer ERC-20 after swap
-```json
-{
-  "target": "0xTokenAddress",
-  "functionSignature": "function transfer(address to, uint256 value)",
-  "args": [
-    { "value": "0xRecipient", "populateDynamically": false },
-    { "value": "0", "populateDynamically": true, "balanceSourceToken": "0xTokenAddress" }
-  ],
-  "value": "0",
-  "isNativeTransfer": false
-}
-```
+## onFailure
 
-### Simple native transfer
-```json
-{
-  "target": "0xRecipient",
-  "functionSignature": "",
-  "args": [],
-  "value": "10000000000000000",
-  "isNativeTransfer": true
-}
-```
+| `action` | Result when any step fails |
+|---|---|
+| `revert` (default) | The fill does not happen and the transfer is refunded (in the bridged token) |
+| `deliver-output-token` | The bridged token goes to `onFailure.recipient` instead |
 
-## Failure Behavior
-- If the bridge/swap succeeds but an action reverts, the bridged tokens remain in the multicall handler contract on the destination chain. They are **not lost** — the recipient can withdraw them manually.
-- Actions are executed atomically in order. If action N reverts, actions N+1 onward are also skipped.
-- Check the `actionsSucceeded` field in the `GET /deposit/status` response to determine whether actions executed successfully after a fill.
+When the quote also uses `attestation` or `gasTopUp`, `onFailure.recipient`
+must equal `destination.recipient`.
 
-## Important Notes
-- Actions execute in array order. Sequence dependencies explicitly.
-- If you need an exact amount for a downstream action, use static values and avoid dynamic balance population.
-- Use `tradeType=exactOutput` for workflows that require a precise destination amount.
-- For simple "bridge and send to a different recipient" use cases, you do NOT need embedded actions — just set the `recipient` query parameter on `GET /swap/approval`.
+## Tracking
+
+`GET /v1/transfers/{orderId}` reports `status.reason`
+`filled_destination_action_successful` or `filled_destination_action_failed`.
+See [tracking-transactions](../tracking-transactions/SKILL.md).
+
+## Rules
+- **Funds go wherever your steps send them**, not automatically to
+  `destination.recipient`. Pass the user's address explicitly (as the
+  `onBehalfOf`, recipient or `to` argument).
+- **Use `populateDynamically`** for amounts; the delivered amount is only known
+  at fill time. Static amounts risk reverting or leaving dust.
+- **Validate every `target` and `spender`.** Never let end users supply
+  arbitrary targets or calldata.
+- **Order matters.** Steps run in array order; approve before the call that
+  pulls.
+- **Set `destination.refundAddress`** if the recipient cannot handle the
+  bridged token that a failed action would refund.

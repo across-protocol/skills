@@ -1,39 +1,42 @@
 # Resources and Links
 
+## Across API
+- Base URL: `https://api.across.to` (every path under `/v1`)
+- Integrator portal (API keys, webhooks, app fees): https://integrator.portal.across.to
+- Testnet: none. Test on mainnet with small amounts.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /v1/capabilities` | Chains, tokens, routes, funding options, limits |
+| `POST /v1/quotes` | Price a transfer and get its `nextActions` |
+| `POST /v1/quotes/{orderId}/executions` | Submit signatures or transaction refs when the quote asks |
+| `GET /v1/transfers/{orderId}` | Track one transfer |
+| `GET /v1/transfers` | List and reconcile transfers |
+
 ## Documentation
-- Across Docs: https://docs.across.to
-- API Reference: https://docs.across.to/reference/api-reference
-- Contract Addresses: https://docs.across.to/reference/contract-addresses
-- ERC-7683 Standard: https://erc7683.org
+- Docs home: https://docs.across.to
+- Get an API key: https://docs.across.to/introduction/api-keys
+- Quickstart: https://docs.across.to/introduction/quickstart
+- Migration guide (legacy → Across API): https://docs.across.to/introduction/migration-guide
+- Fees and app fees: https://docs.across.to/introduction/fees
+- Refunds: https://docs.across.to/introduction/refunds
+- Tracking: https://docs.across.to/introduction/tracking-deposits
+- Webhooks: https://docs.across.to/introduction/webhooks
+- API reference: https://docs.across.to/api-reference (use only the `/v1` operations; everything under "Deprecated" is legacy)
+- Machine-readable docs: https://docs.across.to/llms.txt
 
-## SDK and Code
-- App SDK (npm): https://www.npmjs.com/package/@across-protocol/app-sdk
-- GitHub (protocol): https://github.com/across-protocol
-- SDK v2 repo: https://github.com/across-protocol/sdk-v2
-- API source code (serverless wrapper on SDK v2): https://github.com/across-protocol/frontend-v2/tree/master/api
+## Do not use
+Anything for the legacy APIs: `app.across.to/api`, `testnet.across.to`, the
+Swap API, `/suggested-fees`, `/deposit/status`, `@across-protocol/app-sdk`,
+`sdk-v2`, the integrator ID registration form, and ERC-7683
+`AcrossOriginSettler` contracts. See
+[SKILL.md](../SKILL.md#rule-zero-never-use-the-legacy-apis).
 
-## API Base URLs
-- Mainnet: `https://app.across.to/api`
-- Testnet: `https://testnet.across.to/api`
-- Testnet Bridge UI: https://testnet.across.to/bridge
-
-## Integrator Registration
-Register to get your 2-byte hex integrator ID before going to production. This enables support and co-marketing.
-- Registration form: https://docs.google.com/forms/d/e/1FAIpQLSe-HY6mzTeGZs91HxObkQmwkMQuH7oy8ngZ1ROiu-f4SR4oMw/viewform
-
-## ERC-7683 Contracts (AcrossOriginSettler)
-| Chain | Address |
-|-------|---------|
-| Base | 0x4afb570AC68BfFc26Bb02FdA3D801728B0f93C9E |
-| Arbitrum | 0xB0B07055F214Ce59ccB968663d3435B9f3294998 |
-
-## Community and Support
+## Community and support
 - Discord: https://discord.across.to
-- Telegram: linked from https://docs.across.to/resources/support-links
-- Twitter/X: linked from https://docs.across.to/resources/support-links
-- Medium: linked from https://docs.across.to/resources/support-links
+- Other channels: https://docs.across.to/resources/support-links
 
 ## Security
-- Audits: https://docs.across.to/resources/audits
-- Bug Bounty: https://docs.across.to/resources/bug-bounty
+- Audits: https://docs.across.to/introduction/audits
+- Bug bounty: https://docs.across.to/introduction/bug-bounty
 - Report bugs: bugs@across.to

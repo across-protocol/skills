@@ -1,82 +1,133 @@
-# Deposit Tracking
+# Tracking Transfers
 
-Track the lifecycle of any Across deposit using the `/deposit/status` endpoint.
+Track every transfer by the `orderId` from its quote, with
+`GET /v1/transfers/{orderId}` or with webhooks. Never use the legacy
+`/deposit/status`, `/deposit` or `/deposits`, and never track by deposit
+transaction hash.
 
-## Endpoint
+## GET /v1/transfers/{orderId}
 
 ```
-GET https://app.across.to/api/deposit/status
+GET https://api.across.to/v1/transfers/{orderId}
+Authorization: Bearer <API key>
 ```
 
-## Query Parameters (use one of these combinations)
+No query parameters are accepted. A `404 not_found.transfer` means the order
+does not exist or belongs to another integrator; the two are indistinguishable.
 
-Option A: by transaction hash
+### Status
+
+| Field | Meaning |
+|---|---|
+| `status.state` | `pending`, `completed`, `refunded`, `failed`. Branch your logic on this |
+| `status.reason` | Detail: `finding_relayer`, `awaiting_execution`, `filled`, `filled_destination_action_successful`, `filled_destination_action_failed`, `refund_confirmed`, `expired`, `origin_transfer_failed`, `submission_rejected` |
+| `status.description` | Support-safe sentence you can show users as-is. Never branch on it |
+| `status.isTerminal` | The outcome is known. **Can flip back to `false`** until `finalized` |
+| `status.finalized` | The outcome can no longer change |
+
+Show progress from `isTerminal`. Act on the outcome in any way you cannot undo
+(crediting a user, releasing goods, re-sending funds) only when `finalized` is
+`true`, typically minutes after the fill.
+
+### Other fields
+
+- `origin`: chain, input token and amount, `depositor`
+- `destination`: chain, output token and amount, `recipient` (absent until
+  delivery is observed)
+- `refund`: refund chain, token, `minAmount` (the guaranteed floor, not the
+  received amount) and recipient; any of these can be `null`
+- `transactions[]`: `deposit`, `fill`, `refund` (and `intermediate`) entries
+  with `txnRef`, `chainId`, `blockTimestamp`, `explorerUrl`
+- `submittedAt`, `filledAt`, `fillTimeMs`
+- `fundingMethod`: `approval`, `permit2`, `erc3009`, `spl_delegate`,
+  `hypercore_action`, ...
+- `quoted`: the terms the quote promised
+- `appFee`: `feeUsd`, `integratorEarningUsd`; `externalId` if you set one
+
+## Polling pattern
+
+```ts
+const BASE_URL = "https://api.across.to";
+const API_KEY = process.env.ACROSS_API_KEY!;
+
+async function track(orderId: string) {
+  while (true) {
+    const res = await fetch(`${BASE_URL}/v1/transfers/${orderId}`, {
+      headers: { Authorization: `Bearer ${API_KEY}` },
+    });
+    if (res.ok) {
+      const transfer = await res.json();
+      const { isTerminal, finalized } = transfer.status;
+      if (isTerminal && finalized) return transfer;
+    }
+    await new Promise((r) => setTimeout(r, 5_000));
+  }
+}
+```
+
+- Poll about every 5 seconds.
+- Treat a `404` right after execution as not yet visible and keep polling for
+  a bounded time. A `404` that persists means a wrong `orderId` or another
+  integrator's key.
+- **Do not mark a transfer failed on a timer.** Neither `expectedFillTimeMs` nor
+  `originValidUntil` means failure on a crosschain route; late deliveries still
+  complete. Only `status` decides.
+- A transfer whose deposit landed stays `pending` until it completes or is
+  refunded; it does not become `expired`. If it is still `pending` well past
+  `originValidUntil` plus `refundPolicy.expectedRefundTimeMs`, contact Across
+  with the `orderId`.
+
+## Refund outcomes
+
+- `refunded` + `refund_confirmed`: the refund executed. Read `refund` and the
+  `transactions[]` entry with `type: "refund"`.
+- `failed` + `expired` or `origin_transfer_failed`: the funds never moved.
+- A destination refund pays the **bridged** token (for example USDC on the
+  destination when the user wanted WETH), to `destination.refundAddress` or
+  the recipient.
+- Refunds are automatic: no signature, no gas, no fee for the user.
+
+## GET /v1/transfers (list)
+
+Newest first, keyset-paginated. Filters are repeatable (values OR within one
+filter, AND across filters), and unknown params return `400`.
+
 | Parameter | Description |
-|-----------|-------------|
-| `depositTxnRef` | The deposit transaction hash emitted by `FundsDeposited` |
+|---|---|
+| `limit` | 1 to 100, default 50 |
+| `cursor` | `nextCursor` from the previous page |
+| `fromSubmittedAt`, `toSubmittedAt` | RFC 3339 range on `submittedAt` |
+| `orderId`, `externalId`, `txnRef` | Reconciliation lookups. `txnRef` matches any transaction in the lifecycle |
+| `statusState`, `statusReason` | Status filters |
+| `depositor`, `recipient`, `refundAddress`, `depositAddress` | Address filters |
+| `originChainId`, `destinationChainId`, `originTokenAddress`, `destinationTokenAddress` | Route filters |
 
-Option B: by chain + deposit ID
-| Parameter | Description |
-|-----------|-------------|
-| `originChainId` | Chain ID where the deposit originated |
-| `depositId` | Deposit ID emitted by `FundsDeposited` |
+Results are scoped to your API key's integrator.
 
-Note: The API description states `depositTxnRef` is not required when using `originChainId` + `depositId`, even though the OpenAPI parameter list marks it as required. Set one of the two options explicitly.
+## Webhooks (push instead of poll)
 
-## Status Values
+Set up in the integrator portal (https://integrator.portal.across.to) under
+**Webhooks**: an HTTPS endpoint that answers `2xx` within 10 seconds, and the
+events to receive. The `whsec_...` signing secret is shown once.
 
-| Status | Meaning |
-|--------|---------|
-| `pending` | Deposit has not been filled yet |
-| `filled` | Filled on destination chain; recipient has received funds |
-| `expired` | Deposit expired and will not be filled; refund will be processed on origin chain |
-| `refunded` | Depositor has been refunded on origin chain |
+| Event | `data` | Sent when |
+|---|---|---|
+| `transfer.status` | `orderId`, `externalId`, `status` | Any `status` field changes |
+| `transfer.data` | The full transfer, as from `GET /v1/transfers/{orderId}` | Any transfer field changes |
 
-## Response Fields (key)
-- `status`
-- `fillTxnRef` (only present when `status` is `filled`)
-- `destinationChainId`
-- `originChainId`
-- `depositId`
-- `depositTxnRef`
-- `depositRefundTxnRef`
-- `actionsSucceeded`
-- `pagination` (currentIndex, maxIndex for batched results)
+Body shape: `{ "version": 1, "type": "transfer.status", "payload": { "id", "timestamp", "data" } }`.
+Headers: `webhook-id`, `webhook-timestamp`, `webhook-signature`.
 
-## Latency
-This endpoint is backed by an indexing service that polls events on a 10-second cadence. Expect 1 to 15 seconds of latency after a deposit transaction is confirmed before the status updates.
+Handling rules:
+- **Verify** every delivery with a [Standard Webhooks](https://www.standardwebhooks.com)
+  library, against the raw body, before parsing.
+- **Acknowledge first** with a `2xx`, then process. Failures are retried with
+  backoff.
+- **Deduplicate on `webhook-id`**; delivery is at least once.
+- **Don't rely on order**; read `status` from each event.
+- **Wait for `finalized: true`** before irreversible actions.
+- No test events are sent, and changes made while a webhook is paused are not
+  replayed.
 
-## Recommended Integration Pattern
-1. Store `depositTxnRef` (or `originChainId` + `depositId`) for each transaction your app initiates.
-2. Poll `GET /deposit/status` **every 10 seconds** to update your UI. Do not poll more frequently — the indexer cadence is 10 seconds.
-3. On mainnet, expect fills in **~2 seconds** — most deposits resolve on the first or second poll.
-4. Show the fill transaction hash (`fillTxnRef`) when status is `filled`.
-5. Handle `expired` by informing the user that a refund is in progress.
-6. If using embedded actions (`POST /swap/approval`), check the `actionsSucceeded` field to verify destination actions executed.
-
-## Bulk Retrieval
-To get all deposits for a given wallet:
-
-```
-GET https://app.across.to/api/deposits?depositor={address}
-```
-
-Supports:
-- `limit`: maximum number of deposits to return
-- `skip`: number of deposits to skip
-- `depositor`: wallet address to filter by
-
-Key fields returned per deposit include:
-- `depositId`, `originChainId`, `destinationChainId`
-- `depositor`, `recipient`
-- `inputToken`, `inputAmount`
-- `outputToken`, `outputAmount`
-- `depositTxHash`, `depositBlockNumber`, `depositBlockTimestamp`
-- `status`, `fillTx`, `fillBlockTimestamp`
-- `depositRefundTxHash`
-- `quoteTimestamp`, `fillDeadline`, `exclusivityDeadline`, `exclusiveRelayer`
-- `swap` and `bridge` fee fields (USD) and gas fee fields
-
-## Important Notes
-- For best results, use the `deposit/status` endpoint on mainnet only; testnet indexing may be incomplete.
-- This endpoint is stateful and indexer-backed, unlike most other Across APIs.
+Do not use the legacy `POST /v1/webhooks/subscriptions` on the old host; it
+belongs to the deprecated deposit-address API.
