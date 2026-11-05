@@ -1,105 +1,71 @@
-# Supported Chains and Tokens
+# Chains, Tokens, Routes and Limits
 
-This file summarizes chain IDs explicitly enumerated in the Across API schema. The canonical, always-current list is the API itself (see endpoints below).
+`GET /v1/capabilities` lists the chains and tokens available to move between,
+flags anything unavailable with a reason, and, for one fully specified route,
+returns how it can be executed and its indicative limits. It is the only
+discovery endpoint; do not use legacy ones.
 
-## Mainnet Chains (per API schema)
+## GET /v1/capabilities
 
-| Chain | Chain ID |
-|-------|----------|
-| Ethereum | 1 |
-| Optimism | 10 |
-| Polygon | 137 |
-| zkSync Era | 324 |
-| Base | 8453 |
-| Arbitrum | 42161 |
-| Linea | 59144 |
-
-## Testnet Chains (per API schema)
-
-| Chain | Chain ID |
-|-------|----------|
-| Ethereum Sepolia | 11155111 |
-| Arbitrum Sepolia | 421614 |
-| Base Sepolia | 84532 |
-| Optimism Sepolia | 11155420 |
-
-## Discovering Tokens and Routes
-
-### Supported chains (Swap API)
+```bash
+curl -H "Authorization: Bearer $ACROSS_API_KEY" \
+  "https://api.across.to/v1/capabilities?originChainId=42161&destinationChainId=8453&include=tokens"
 ```
-GET /swap/chains
-```
-Returns all chains that support crosschain swaps.
 
-### Supported tokens (Swap API)
-```
-GET /swap/tokens
-```
-Returns all whitelisted tokens across all chains. Tokens must be whitelisted by swap sources to appear here.
+### Query parameters
 
-### Supported sources (Swap API)
-```
-GET /swap/sources
-GET /swap/sources?chainId={id}
-```
-Returns supported swap sources globally or for a specific chain.
+| Parameter | Description |
+|---|---|
+| `include` | `chains`, `tokens`. Defaults to both |
+| `originChainId`, `destinationChainId` | Chain ids |
+| `originToken`, `destinationToken` | Token address or symbol. Requires the matching chain id |
+| `reachableOnly` | `true` returns only tokens that can be quoted against the opposite selection (`available` or `degraded`). Default `false` |
+| `search` | Free-text match on symbol, name or address |
+| `capabilities.operations` | Operations your client can perform, as `kind:ecosystem` (for example `approve_token:evm`) or `submit_execution`. Repeat or comma-separate. Tokens none of them can fund come back `unavailable` with `unsupported_funding_method` |
+| `rails` | Evaluate routes on one rail only: `across`, `cctp`, `oft`, `paxos`. `capabilities.limits` is not returned with it |
+| `limit` | Page size per token side, 1 to 100, default 10 |
+| `originCursor`, `destinationCursor` | Cursors from `pagination.origin.nextCursor` / `pagination.destination.nextCursor` |
 
-### Available routes (bridge-only)
-```
-GET /available-routes?originChainId={id}&destinationChainId={id}
-```
-Returns all supported bridgeable token pairs between two chains, including token symbols and addresses on each chain. This only includes bridgeable tokens.
+The query is strict: an unrecognised parameter returns `400`.
 
-## Common Token Addresses (reference examples)
+### Response
 
-These are commonly used token addresses for building API calls. Always verify against `GET /swap/tokens` or `GET /available-routes` before production use — addresses can change as token contracts are upgraded.
+| Field | Contents |
+|---|---|
+| `chains[]` | `chainId`, `name`, `displayName`, `namespace` (`evm`, `solana`, `tron`), `canBeOrigin`, `canBeDestination`, `nativeToken`, `explorerUrl`, `logoUrl`. Not paginated |
+| `originTokens[]`, `destinationTokens[]` | `chainId`, `address`, `symbol`, `displaySymbol`, `name`, `decimals`, `priceUsd` (advisory, display only), `verified`, `availability` |
+| `pagination.origin`, `pagination.destination` | `nextCursor` (absent on the last page), `total` |
+| `capabilities` | Present only when `originChainId`, `originToken`, `destinationChainId` and `destinationToken` are all set and the route resolves |
+| `meta.unresolvedAnchors` | Anchors that could not be resolved, so you can tell an empty result from a typo |
 
-### USDC
-| Chain | Address |
-|-------|---------|
-| Ethereum (1) | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` |
-| Arbitrum (42161) | `0xaf88d065e77c8cC2239327C5EDb3A432268e5831` |
-| Base (8453) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| Optimism (10) | `0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85` |
-| Polygon (137) | `0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359` |
+Token `availability.status`:
+- `available`: selectable as things stand.
+- `degraded`: selectable and still quotes, but at risk; `reasons` says why.
+- `incompatible`: a route exists only after clearing the opposite chain and token.
+- `unavailable`: no usable route even then.
 
-### WETH (use this instead of ETH)
-| Chain | Address |
-|-------|---------|
-| Ethereum (1) | `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` |
-| Arbitrum (42161) | `0x82aF49447D8a07e3bd95BD0d56f35241523fBab1` |
-| Base (8453) | `0x4200000000000000000000000000000000000006` |
-| Optimism (10) | `0x4200000000000000000000000000000000000006` |
+### The `capabilities` block (one route)
 
-### USDT
-| Chain | Address |
-|-------|---------|
-| Ethereum (1) | `0xdAC17F958D2ee523a2206206994597C13D831ec7` |
-| Arbitrum (42161) | `0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9` |
+| Field | Meaning |
+|---|---|
+| `availability` | `available`, `degraded` (still quotes) or `unavailable` (does not quote), with `reasons` |
+| `amountTypes` | Quote modes the route serves |
+| `executionOptions[].requiredOperations` | Each option is one way to execute the pair and needs every operation it lists. Narrowed by the `capabilities.operations` you sent |
+| `limits.min`, `limits.max` | Indicative bounds in the origin token. `limits.destination.max` gives the bound in the destination token for output-based quotes |
+| `limits.validUntil` | When the snapshot goes stale |
+| `gasTopUp` | Whether a `gasTopUp` is supported, and `limits.max.amount` for it |
 
-### DAI
-| Chain | Address |
-|-------|---------|
-| Ethereum (1) | `0x6B175474E89094C44Da98b954EedeAC495271d0F` |
-| Arbitrum (42161) | `0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1` |
-| Optimism (10) | `0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1` |
+## Rules
 
-### WBTC
-| Chain | Address |
-|-------|---------|
-| Ethereum (1) | `0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599` |
-| Arbitrum (42161) | `0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f` |
-
-## Token Address Notes
-- **Always use wrapped native token addresses** when querying APIs (WETH, not ETH; WMATIC, not MATIC).
-- Token addresses are **chain-specific** — the same token has different addresses on different chains.
-- Amounts are always in the token's **native decimals** (USDC = 6 decimals, WETH = 18 decimals, DAI = 18 decimals, WBTC = 8 decimals).
-- When in doubt, query the API. The addresses above are for reference only.
-
-## Contract Addresses
-Full contract addresses for all chains (mainnet and testnet) are maintained at:
-https://docs.across.to/reference/contract-addresses
-
-## Notes
-- The API is the source of truth for current chain and token support.
-- Chain lists expand over time. Use the endpoints above for the latest data.
+- **Availability means selectable, not priceable.** `POST /v1/quotes` is the
+  binding check for a specific amount.
+- **Limits are a snapshot.** An absent bound means unknown, not unlimited.
+  Re-read after `validUntil`.
+- **Take `decimals` from the response.** The same asset can have different
+  decimals on different chains.
+- **Use the token addresses the API returns**, including for native tokens.
+  Addresses come back lowercased; compare case-insensitively.
+- **Follow cursors** until `nextCursor` is absent; a page can hold fewer rows
+  than `limit`, or none, and still continue. `409 conflict.cursor_expired`
+  means start again from the first page.
+- **Don't hardcode chain or token lists.** Query the API.

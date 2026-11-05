@@ -1,86 +1,81 @@
 # Security Checklist
 
-Use this checklist when reviewing or building Across integrations.
+Use this checklist when building or reviewing an Across API integration.
 
-## Integration Security
+## Endpoints
+- [ ] Only `https://api.across.to` with `/v1/capabilities`, `/v1/quotes`,
+      `/v1/quotes/{orderId}/executions` and `/v1/transfers`. No legacy APIs.
+- [ ] No hand-built Across contract calls; only the quote's `nextActions`.
 
-### Token Handling
-- [ ] Use correct token addresses for each specific chain. Do not hardcode cross-chain.
-- [ ] Use wrapped token addresses (WETH) when interacting with APIs, not native ETH.
-- [ ] Validate that `amount` is in the correct decimals for the token (6 for USDC, 18 for WETH).
-- [ ] Never trust user-supplied token addresses without validating against `/available-routes` or `/swap/tokens`.
+## API keys
+- [ ] The key is used only server-side. Browser and mobile clients call your
+      backend, never the Across API with the key.
+- [ ] The key is in a secrets manager, never in source control, logs or error
+      messages.
+- [ ] Separate keys per service or environment, so one can be rotated or
+      revoked in the integrator portal without touching the others.
+- [ ] `401` (missing, wrong, revoked or expired key) and `429` are handled.
 
-### Approvals
-- [ ] Process all `approvalTxns` from the Swap API response before submitting the swap tx.
-- [ ] Do not set unlimited approvals unless the user explicitly opts in. Prefer exact-amount approvals.
-- [ ] Verify the spender address matches the contract returned by the API.
+## Quotes
+- [ ] Quotes are never cached; a new one is requested after `expiresAt`.
+- [ ] `maxFee` is set explicitly (the default can allow up to 50% value loss).
+- [ ] `slippageBps` is not used.
+- [ ] Users see `destination.minAmount` as the guaranteed amount and
+      `destination.amount` as the estimate.
+- [ ] Token addresses and decimals come from `GET /v1/capabilities`; amounts
+      are base-unit strings.
+- [ ] With `attestation`: `signature` is recovered over `typedData` and
+      compared with the Across signer address received during onboarding (not
+      the response's `signer` field), and only values in `typedData.message`
+      are relied on.
 
-### Slippage and Pricing
-- [ ] Use `slippage=auto` unless the user has a specific tolerance.
-- [ ] If using numeric slippage, validate it is within a reasonable range (for example, 0.001 to 0.05).
-- [ ] Do not cache quotes. `/swap/approval` and `/suggested-fees` are derived from on-chain state.
-- [ ] Check `quoteExpiryTimestamp` before submitting a swap transaction. Fetch a new quote if expired.
+## Approvals and signing
+- [ ] `authorizationPolicy.approvalAmount: "exact"` unless the user opts in to
+      an unlimited approval (the default).
+- [ ] `capabilities.operations` declares only what the client can do, and the
+      whole `nextActions` list is checked before the first wallet prompt.
+- [ ] Each action's `chainId` and `tokenAddress` match the quoted route before
+      the wallet is prompted.
+- [ ] `typedData` is signed verbatim.
+- [ ] `signerRequirement: "eoa"` actions are not sent to contract accounts.
 
-### Refund Handling
-- [ ] Understand default refund behavior when `refundOnOrigin` is not set:
-  - B2B or A2B routes: refund on origin chain.
-  - B2A or A2A routes: refund on destination chain.
-- [ ] Set `refundAddress` explicitly if the depositor and intended refund recipient differ.
-- [ ] Refund recipient priority is `refundAddress` > `recipient` > `depositor`.
-- [ ] Handle the `expired` deposit status in your UI and inform users a refund is in progress.
+## Execution
+- [ ] The executions endpoint is called only when `nextActions` ends with
+      `submit_execution`, and before `expiresAt`.
+- [ ] An expired quote is re-quoted, not re-executed.
+- [ ] `409 conflict.submission_state_unknown` is retried with the same request,
+      never by re-quoting.
 
-### Embedded Actions (POST /swap/approval)
-- [ ] Validate all `target` addresses in the actions array. Do not allow user-controlled targets without sanitization.
-- [ ] For actions that require precise amounts, use static values and avoid `populateDynamically`.
-- [ ] Actions execute in array order. Sequence dependencies explicitly.
+## Refunds
+- [ ] `refundPolicy` is shown before the user signs; `supported: false` (for
+      example `irreversible_rail`) means no automatic refund on that route.
+- [ ] `destination.refundAddress` is set when the recipient cannot handle the
+      bridged token.
 
-### Message Construction (if using /suggested-fees with message)
-- [ ] The `message` field is calldata passed to `handleAcrossMessage()` on the recipient contract.
-- [ ] If `recipient` is an EOA and `message` is defined, the API will reject the request.
-- [ ] Validate message encoding carefully. Malformed calldata will cause the destination call to revert.
+## Destination actions
+- [ ] Every `target` and `spender` is validated; end users cannot inject
+      targets or calldata.
+- [ ] Steps send the output to the intended owner explicitly.
+- [ ] `onFailure` is chosen deliberately.
 
-### Integrator ID
-- [ ] Register for a 2-byte hex integrator ID before going to production.
-- [ ] Use a consistent `integratorId` across all API calls for tracking and support.
+## Tracking
+- [ ] Irreversible actions wait for `status.finalized: true`, not just
+      `isTerminal`.
+- [ ] No transfer is marked failed because `expectedFillTimeMs` or
+      `originValidUntil` passed.
 
-## Protocol-Level Security
+## Risk Notes template
 
-### Verification Model
-Across uses UMA's Optimistic Oracle for settlement verification. Bundles of fills are proposed on-chain with a bond and pass through a challenge period before execution. Invalid bundles can be disputed.
-
-### Audits
-The protocol has undergone multiple security audits:
-- Across V3 Audit
-- Across V3 Incremental Audit
-- Across V2 Audit
-- Across Token and Token Distributor Audit
-- UMA Continuous Audit (Optimistic Oracle)
-- UMA Audit - L2 Bridges
-- UMA Audit - Phase 4
-
-### Bug Bounty
-Active bug bounty program covering all smart contracts and off-chain code in the `across-protocol` repository.
-
-| Severity | Reward |
-|----------|--------|
-| Low | $250 |
-| Medium | $1,000 |
-| High | $10,000 |
-| Critical | Up to $1,000,000 |
-
-Severity follows OWASP risk rating (Impact x Likelihood).
-
-Submit reports to: bugs@across.to
-
-## Risk Notes Template
-When implementing changes that touch signing, fees, slippage, token approvals, refund handling, or crosschain message construction, include a risk notes section:
+Include in any change touching keys, signing, fees, approvals, refunds or
+destination actions:
 
 ```
 ## Risk Notes
-- **Signing**: [what is being signed and by whom]
-- **Fees**: [fee model used, who pays, integrator fee setup]
-- **Slippage**: [tolerance setting and rationale]
-- **Approvals**: [what tokens, what amounts, what spender]
-- **Refunds**: [expected refund chain and recipient]
-- **Messages**: [any crosschain calldata and its purpose]
+- **API key**: [where it is stored, which service uses it]
+- **Signing**: [which nextActions are signed or sent, by which wallet]
+- **Fees**: [maxFee, appFeeBps]
+- **Approvals**: [token, exact or infinite, spender from the quote]
+- **Refunds**: [refundPolicy for the route, refund recipient]
+- **Destination actions**: [targets, calldata, onFailure]
+- **Tracking**: [what waits for status.finalized]
 ```
