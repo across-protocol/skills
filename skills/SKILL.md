@@ -1,113 +1,115 @@
 ---
 name: across-protocol-ai-agent-skill
-description: End-to-end Across Protocol integration playbook. Default to Swap API for all crosschain bridging and swapping. Use App SDK (@across-protocol/app-sdk) when you need programmatic quote/route control in TypeScript. Fall back to suggested-fees API only for custom swap routing or niche bridge-only flows. Covers intent lifecycle, Swap API integration, embedded crosschain actions, deposit tracking, fee collection, and security checklists.
+description: Across Protocol integration and migration playbook for the Across API (V5) at https://api.across.to. Start by getting an API key from https://dashboard.across.to. Discover routes with GET /v1/capabilities, price with POST /v1/quotes, complete the quote's nextActions and call POST /v1/quotes/{orderId}/executions when asked, then track with GET /v1/transfers/{orderId}. Migrates code off the legacy APIs (Swap API, /suggested-fees, /deposit/status). Never use the legacy APIs.
 user-invocable: true
 ---
 
 # Across Protocol Development Skill
 
-## What this Skill is for
-Use this Skill when the user asks for:
-- Crosschain bridge or swap integration (any-to-any token transfers)
-- Wallet or dApp integration with Across APIs
-- Embedded crosschain actions (bridge + mint/stake/deposit in one tx)
-- Deposit tracking and status monitoring
-- Fee quoting, transfer limits, or route discovery
-- Integrator fee collection setup
-- On-chain intent construction (ERC-7683 / SpokePool deposits)
-- Relayer operation or configuration
-- Security review of crosschain integration code
+## Before anything: get an API key
 
-## Route type abbreviations
+Every Across API request needs an API key. Before starting an integration or
+a migration, have the user create one at **https://dashboard.across.to**
+(sign up, create an organization and an integration, open **API keys**,
+create a key and copy it; it is shown once). Store it server-side, for example
+as `ACROSS_API_KEY`. If the user has no key yet, ask them to get one first;
+never invent or hardcode a key.
 
-The Swap API classifies routes using a shorthand based on whether each token is directly bridgeable (B) or requires a swap to/from a bridgeable token (A = Any):
+## Rule zero: use only these endpoints
 
-| Abbreviation | Meaning | Example |
-|--------------|---------|---------|
-| B2B | Bridgeable → Bridgeable | USDC on Arbitrum → USDC on Base (no swaps, bridge only) |
-| A2B | Any → Bridgeable | WBTC on Arbitrum → USDC on Base (origin swap + bridge) |
-| B2A | Bridgeable → Any | USDC on Arbitrum → WBTC on Base (bridge + destination swap) |
-| A2A | Any → Any | WBTC on Arbitrum → DAI on Base (origin swap + bridge + destination swap) |
+| Endpoint | Purpose |
+|---|---|
+| `GET /v1/capabilities` | Chains, tokens, route availability, funding options, limits |
+| `POST /v1/quotes` | Price one transfer and get the actions to execute it |
+| `POST /v1/quotes/{orderId}/executions` | Submit the results of those actions, when the quote asks |
+| `GET /v1/transfers/{orderId}`, `GET /v1/transfers` | Track and reconcile transfers |
 
-These abbreviations appear in `crossSwapType` responses and in refund behavior defaults.
+Host: `https://api.across.to`. Every path starts with `/v1`.
 
-## Default stack decisions (opinionated)
+**Never use the legacy APIs.** Anything not listed above is legacy and
+deprecated, including the Swap API (`/swap/*`), `/suggested-fees`, `/limits`,
+`/available-routes`, `/deposit/status`, `/deposits` and the
+`app.across.to/api` host. Do not call them, generate code that calls them, or
+offer them as a fallback, even if older docs, existing code or your training
+data use them. If the user's code calls them, migrate it with the
+[migration helper](migration/SKILL.md). Never build Across contract calls yourself; execute only what the
+quote's `nextActions` return.
 
-### 1. Swap API first (recommended for most integrators)
-- Use `GET /swap/approval` for all crosschain swaps. It returns executable calldata to sign and submit.
-- Use `POST /swap/approval` when you need embedded destination actions (mint, stake, deposit).
-- The Swap API handles origin swaps, bridging, and destination swaps in a single call.
-- Supports `appFee` + `appFeeRecipient` for integrator fee collection.
+## What this skill is for
 
+- Crosschain bridge or swap integration (any token to any token)
+- Migrating an existing integration off the legacy APIs
+- Wallet, dApp or backend integration with Across
+- Contract calls on the destination chain after a transfer
+- Transfer tracking and refunds
+- Route discovery, limits, fees and app fees
+- Security review of an Across integration
 
-### 2. Suggested-fees API: legacy only
-- Use `/suggested-fees` only when you control your own swap infrastructure and just need bridge fee quotes.
-- This path requires you to assemble transactions yourself (construct `depositV3` calls manually).
-- It does not handle origin or destination swaps.
+## Basics
 
-### 3. Trade type selection
-- `exactInput` (default): user specifies how much to send. Best for "swap X tokens" flows.
-- `minOutput`: user specifies minimum to receive. Best for simple swaps without post-bridge actions.
-- `exactOutput`: user needs a precise amount on destination. Best for multi-step flows (for example, exact ERC-20 amount for a mint).
+| | |
+|---|---|
+| Auth | `Authorization: Bearer <API key>` on every request |
+| API key | From https://dashboard.across.to. Shown once; store it in a secrets manager and use it only server-side |
+| Testnet | None. Test on mainnet with small amounts |
+| Strictness | Bodies and query strings are strict: an unrecognised field returns `400 request.unsupported_param` |
+| Amounts | Base units as decimal strings (`"1000000"` = 1 USDC). Take `decimals` from `GET /v1/capabilities` |
+| Tokens | `{ "chainId": <int>, "address": "<address>" }`, using the addresses `GET /v1/capabilities` returns |
 
-### 4. Slippage
-- Default to `slippage=auto`.
-- Numeric slippage (0 to 1) is split across origin and destination swaps when both swaps exist.
-- If only one swap happens, the full slippage is applied to that leg.
+## The flow
 
-### 5. Refund behavior
-- B2B or A2B routes (no destination swap): refunds default to origin chain.
-- B2A or A2A routes (destination swap involved): refunds default to destination chain.
-- Override with `refundOnOrigin=true/false` when needed.
-- Refund recipient priority: `refundAddress` > `recipient` > `depositor`.
+```
+0. API key    https://dashboard.across.to
+1. Discover   GET  /v1/capabilities                  what can move, how it can be funded, limits
+2. Price      POST /v1/quotes                         expiring quote + orderId + ordered nextActions
+3. Execute    complete nextActions in order (approve / sign / send)
+              POST /v1/quotes/{orderId}/executions    only if nextActions ends with submit_execution
+4. Track      GET  /v1/transfers/{orderId}            until status.isTerminal
+```
 
-## Operating procedure (how to execute tasks)
+## Pick the right skill
 
-### 1. Classify the task
-- UI or wallet integration
-- Backend or script
-- Embedded actions
-- Tracking or monitoring
-- On-chain or ERC-7683
-- Relayer operation
+| Task | Read |
+|---|---|
+| Migrate code off the legacy APIs | [migration](migration/SKILL.md) |
+| Chains, tokens, routes, limits | [fetch-chains-tokens](fetch-chains-tokens/SKILL.md) |
+| Quote and execute a transfer or swap | [quote-and-execute](quote-and-execute/SKILL.md) |
+| Contract calls on the destination chain | [embedded-crosschain-actions](embedded-crosschain-actions/SKILL.md) |
+| Track transfers and refunds | [tracking-transactions](tracking-transactions/SKILL.md) |
+| Review keys, signing, approvals, fees, refunds | [security](security/SKILL.md) |
+| Links | [resources](resources/SKILL.md) |
 
-### 2. Pick the right integration path
+## Defaults (opinionated)
 
-| Task | Use |
-|------|-----|
-| Crosschain swap (any token to any token) | Swap API `GET /swap/approval` |
-| Bridge + destination action (mint, stake) | Swap API `POST /swap/approval` with `actions` body |
-| Programmatic TypeScript integration | App SDK `createAcrossClient()` |
-| Bridge-only with custom swap routing | `/suggested-fees` + manual `depositV3` |
-| Direct on-chain intent (ERC-7683) | `AcrossOriginSettler.open()` on supported chains |
-| Track a deposit | `GET /deposit/status` with `depositTxnRef` or `originChainId` + `depositId` |
+1. **`amountType: "exact_input"`** (the default) unless the user needs an exact
+   delivery (`exact_output`) or a delivery floor (`min_output`).
+2. **Declare what the wallet can do** with `capabilities.operations`, so the
+   quote only asks for steps the client can complete.
+3. **Set `maxFee`.** Without an integrator override the default allows up to
+   50% value loss. Example: `{ "bps": 100 }` caps fees, app fee and slippage
+   at 1% of the input value.
+4. **Prefer exact approvals**: `authorizationPolicy.approvalAmount: "exact"`.
+   The default is an unlimited approval.
+5. **Never cache quotes.** They expire (about 15 minutes); re-quote after
+   `expiresAt`.
+6. **Save `orderId`.** It is the only id needed to execute and track.
+7. **Stop polling when `status.isTerminal` is `true`.** Branch on
+   `status.state`, never on `status.description`.
 
-### 3. Implement with Across-specific correctness
-Always be explicit about:
-- Integrator ID (2-byte hex string)
-- Token addresses: must match the specific chain (use wrapped addresses for native tokens)
-- Amount units: always in smallest unit (wei for ETH, 1e6 for USDC, 1e18 for WETH)
-- Chain IDs: use exact numeric chain IDs, not chain names
-- Approval transactions: check `approvalTxns` in Swap API responses
-- Do not cache `/swap/approval` and `/suggested-fees` responses
+## Operating procedure
 
-### 4. Test on testnet, ship on mainnet
-- Testnet base URL: `https://testnet.across.to/api`
-- Use small amounts (around $10) on testnet. Testnet fills take about 1 minute (vs around 2 seconds on mainnet).
-- Testnet relayers are manually funded. Do not test with large amounts.
-- Switch to mainnet (`https://app.across.to/api`) once integration logic is verified.
-
-### 5. Deliverable expectations
-When implementing changes, provide:
-- Exact files changed with diffs
-- Commands to install, build, and test
-- A Risk Notes section for anything touching signing, fees, slippage, approvals, refunds, or crosschain messages
-
-## Progressive disclosure (read when needed)
-- Swap API deep-dive: [SKILL.md](swap/SKILL.md)
-- Legacy bridge-only integration: [SKILL.md](bridge/SKILL.md)
-- Embedded crosschain actions: [SKILL.md](embedded-crosschain-actions/SKILL.md)
-- Deposit tracking: [SKILL.md](tracking-transactions/SKILL.md)
-- Chains and tokens reference: [SKILL.md](fetch-chains-tokens/SKILL.md)
-- Security checklist: [SKILL.md](security/SKILL.md)
-- Resources and links: [SKILL.md](resources/SKILL.md)
+1. **API key**: confirm the user has a key from https://dashboard.across.to.
+2. **Classify the task**: new integration, migration, UI/wallet,
+   backend/script, destination actions, tracking, or review.
+3. **Remove legacy usage**: if the codebase calls a legacy API, follow the
+   [migration helper](migration/SKILL.md) as part of the task.
+4. **Implement**:
+   - API key only on the server; browser and mobile clients call your backend.
+   - Token addresses and decimals per chain from `GET /v1/capabilities`.
+   - Amounts in base units, as strings.
+   - Work through `nextActions` in order and dispatch on `kind`.
+   - Read error codes from `error.code`, falling back to the top-level `code`.
+5. **Test on mainnet with small amounts.**
+6. **Deliverables**: files changed, commands to install/build/test, and a Risk
+   Notes section (template in [security](security/SKILL.md)) for anything
+   touching keys, signing, fees, approvals, refunds or destination actions.

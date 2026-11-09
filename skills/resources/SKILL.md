@@ -1,39 +1,38 @@
 # Resources and Links
 
-## Documentation
-- Across Docs: https://docs.across.to
-- API Reference: https://docs.across.to/reference/api-reference
-- Contract Addresses: https://docs.across.to/reference/contract-addresses
-- ERC-7683 Standard: https://erc7683.org
+## Across API
+- API keys: **https://dashboard.across.to**. Get one before starting an
+  integration or migration.
+- Base URL: `https://api.across.to` (every path starts with `/v1`)
+- Testnet: none. Test on mainnet with small amounts.
 
-## SDK and Code
-- App SDK (npm): https://www.npmjs.com/package/@across-protocol/app-sdk
-- GitHub (protocol): https://github.com/across-protocol
-- SDK v2 repo: https://github.com/across-protocol/sdk-v2
-- API source code (serverless wrapper on SDK v2): https://github.com/across-protocol/frontend-v2/tree/master/api
+| Endpoint | Reference |
+|---|---|
+| `GET /v1/capabilities` | https://docs.across.to/api-reference/v1/capabilities/get |
+| `POST /v1/quotes` | https://docs.across.to/api-reference/v1/quotes/post |
+| `POST /v1/quotes/{orderId}/executions` | https://docs.across.to/api-reference/v1/quotes/orderid/executions/post |
+| `GET /v1/transfers/{orderId}` | https://docs.across.to/api-reference/v1/transfers/orderid/get |
+| `GET /v1/transfers` | https://docs.across.to/api-reference/v1/transfers/get |
 
-## API Base URLs
-- Mainnet: `https://app.across.to/api`
-- Testnet: `https://testnet.across.to/api`
-- Testnet Bridge UI: https://testnet.across.to/bridge
+## Guides
+- Get an API key: https://docs.across.to/introduction/api-keys
+- Quickstart: https://docs.across.to/introduction/quickstart
+- Migration guide (legacy APIs → Across API): https://docs.across.to/introduction/migration-guide
+- Destination actions: https://docs.across.to/introduction/quickstart/destination-actions
+- Fees and app fees: https://docs.across.to/introduction/fees
+- Refunds: https://docs.across.to/introduction/refunds
+- Docs home: https://docs.across.to
 
-## Integrator Registration
-Register to get your 2-byte hex integrator ID before going to production. This enables support and co-marketing.
-- Registration form: https://docs.google.com/forms/d/e/1FAIpQLSe-HY6mzTeGZs91HxObkQmwkMQuH7oy8ngZ1ROiu-f4SR4oMw/viewform
+## Machine-readable
+- OpenAPI spec: https://docs.across.to/openapi.yaml
+- Docs index for agents: https://docs.across.to/llms.txt
+- Any docs page as markdown: append `.mdx` to its URL
 
-## ERC-7683 Contracts (AcrossOriginSettler)
-| Chain | Address |
-|-------|---------|
-| Base | 0x4afb570AC68BfFc26Bb02FdA3D801728B0f93C9E |
-| Arbitrum | 0xB0B07055F214Ce59ccB968663d3435B9f3294998 |
+If a docs page tells you to call `/suggested-fees`, `/swap/*`,
+`/deposit/status` or any other legacy endpoint, it is the old version of the
+page: ignore it and use only the `/v1` endpoints above. The legacy reference
+at https://legacy.docs.across.to is only for reading existing code during a
+[migration](../migration/SKILL.md); never build anything new from it.
 
-## Community and Support
+## Support
 - Discord: https://discord.across.to
-- Telegram: linked from https://docs.across.to/resources/support-links
-- Twitter/X: linked from https://docs.across.to/resources/support-links
-- Medium: linked from https://docs.across.to/resources/support-links
-
-## Security
-- Audits: https://docs.across.to/resources/audits
-- Bug Bounty: https://docs.across.to/resources/bug-bounty
-- Report bugs: bugs@across.to
