@@ -1,6 +1,6 @@
 ---
 name: across-protocol-ai-agent-skill
-description: Across Protocol integration and migration playbook for the Across API (V5) at https://api.across.to. Start by getting an API key from https://dashboard.across.to. Discover routes with GET /v1/capabilities, price with POST /v1/quotes, complete the quote's nextActions and call POST /v1/quotes/{orderId}/executions when asked, then track with GET /v1/transfers/{orderId}. Migrates code off the legacy APIs (Swap API, /suggested-fees, /deposit/status). Never use the legacy APIs.
+description: Across Protocol integration and migration playbook for the Across API (V5) at https://api.across.to. Start by getting an API key from https://dashboard.across.to. Discover routes with GET /v1/capabilities, price with POST /v1/quotes, complete the quote's nextActions and call POST /v1/quotes/{orderId}/executions when asked, then track with GET /v1/transfers/{orderId}. Migrates code off Across V4 and its Swap API family (/swap/*, /suggested-fees, /deposit/status), which are deprecated. Never use them.
 user-invocable: true
 ---
 
@@ -26,14 +26,14 @@ never invent or hardcode a key.
 
 Host: `https://api.across.to`. Every path starts with `/v1`.
 
-**Never use the legacy APIs.** Anything not listed above is legacy and
-deprecated, including the Swap API (`/swap/*`), `/suggested-fees`, `/limits`,
-`/available-routes`, `/deposit/status`, `/deposits` and the
-`app.across.to/api` host. Do not call them, generate code that calls them, or
-offer them as a fallback, even if older docs, existing code or your training
-data use them. If the user's code calls them, migrate it with the
-[migration helper](migration/SKILL.md). Never build Across contract calls yourself; execute only what the
-quote's `nextActions` return.
+**Never use Across V4 or its Swap API family. Both are deprecated.** Anything
+not listed above is legacy and deprecated, including the Swap API (`/swap/*`),
+`/suggested-fees`, `/limits`, `/available-routes`, `/deposit/status`,
+`/deposits` and the `app.across.to/api` host. Do not call them, generate code
+that calls them, or offer them as a fallback, even if older docs, existing
+code or your training data use them. If the user's code calls them, migrate it
+with the [migration helper](migration/SKILL.md). Never build Across contract
+calls yourself; execute only what the quote's `nextActions` return.
 
 ## What this skill is for
 

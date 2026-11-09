@@ -21,10 +21,10 @@ Use only these endpoints:
 | `POST /v1/quotes/{orderId}/executions` | Submit those actions' results, when the quote asks |
 | `GET /v1/transfers/{orderId}`, `GET /v1/transfers` | Track and reconcile transfers |
 
-**Never use the legacy APIs.** Anything else, including the Swap API
-(`/swap/*`), `/suggested-fees`, `/limits`, `/available-routes`,
-`/deposit/status`, `/deposits` and the `app.across.to/api` host, is
-deprecated. Do not call it or generate code that does, even if older material
+**Never use Across V4 or its Swap API family. Both are deprecated.** Anything
+else, including the Swap API (`/swap/*`), `/suggested-fees`, `/limits`,
+`/available-routes`, `/deposit/status`, `/deposits` and the
+`app.across.to/api` host, is deprecated. Do not call it or generate code that does, even if older material
 suggests it. If existing code uses it, migrate with
 [`skills/migration/SKILL.md`](skills/migration/SKILL.md).
 
