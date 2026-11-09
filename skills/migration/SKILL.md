@@ -1,9 +1,9 @@
 # Migration Helper: Legacy APIs → Across API
 
-Use this skill when a codebase still calls the deprecated Across APIs and the
-user wants to move to the Across API (`https://api.across.to/v1`). Work
-through the steps in order. The goal is zero legacy calls left, not a mix of
-old and new.
+Use this skill when a codebase still calls Across V4 or its Swap API family,
+which are deprecated and must not be used, and the user wants to move to the
+Across API (`https://api.across.to/v1`). Work through the steps in order. The
+goal is zero legacy calls left, not a mix of old and new.
 
 ## Step 0: API key first
 
