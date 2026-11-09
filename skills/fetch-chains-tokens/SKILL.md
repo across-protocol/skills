@@ -7,6 +7,8 @@ discovery endpoint; do not use legacy ones.
 
 ## GET /v1/capabilities
 
+Needs an API key from https://dashboard.across.to.
+
 ```bash
 curl -H "Authorization: Bearer $ACROSS_API_KEY" \
   "https://api.across.to/v1/capabilities?originChainId=42161&destinationChainId=8453&include=tokens"

@@ -6,6 +6,9 @@ adding `destinationActions` to `POST /v1/quotes`. Everything else about the
 quote, its execution and tracking is unchanged
 ([quote-and-execute](../quote-and-execute/SKILL.md)).
 
+**EVM to EVM only.** Destination actions work on transfers from an EVM chain
+to an EVM chain. Destination actions involving Solana are not available yet.
+
 To simply deliver to another address, you don't need actions: set
 `destination.recipient`.
 
@@ -87,8 +90,9 @@ A completed transfer with destination actions reports `status.reason`
 on `GET /v1/transfers/{orderId}`.
 
 ## Rules
-- **Funds go wherever your steps send them**, not to
-  `destination.recipient`. Pass the user's address explicitly (for example as
+- **Your steps decide where the funds end up.** With steps present, the
+  output is not sent to `destination.recipient`; the last step has to deliver
+  the final asset. Pass the user's address explicitly (for example as
   `onBehalfOf` or the recipient argument).
 - **Use `populateDynamically`** on the step that spends the funds, so it uses
   the full amount that arrived.

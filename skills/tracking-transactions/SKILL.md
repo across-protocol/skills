@@ -15,7 +15,8 @@ Authorization: Bearer <API key>
 Takes no query parameters (any returns `400 request.unsupported_param`). The
 id is case-sensitive: use it exactly as the quote returned it.
 `404 not_found.transfer` covers an unknown id, a malformed id and another
-integrator's transfer alike.
+integrator's transfer alike. A missing or invalid key returns `401` with a
+nested `auth.missing_credentials` or `auth.invalid_credentials`.
 
 ### Status
 
@@ -24,12 +25,8 @@ integrator's transfer alike.
 | `status.state` | `pending`, `completed`, `refunded`, `failed`. Branch your logic on this |
 | `status.reason` | `finding_relayer`, `awaiting_execution` (pending); `filled`, `filled_destination_action_successful`, `filled_destination_action_failed` (completed); `refund_confirmed` (refunded); `expired`, `origin_transfer_failed`, `submission_rejected` (failed) |
 | `status.description` | Support-safe sentence to show users as-is. Never branch on it |
-| `status.isTerminal` | `true` when the state is `completed`, `refunded` or `failed`. **Not monotonic** until `finalized` |
-| `status.finalized` | `true` means the outcome will not change |
-
-Show progress from `isTerminal`. Wait for `finalized: true`, typically minutes
-after the fill, before any action you cannot take twice (crediting a user,
-releasing goods, sending funds again).
+| `status.isTerminal` | `true` when the state is `completed`, `refunded` or `failed`: the outcome is known. **Stop polling when it is `true`** |
+| `status.finalized` | Whether the chains involved are final. Follows `isTerminal`, typically minutes later. Informational: you don't need to wait for it |
 
 ### Other fields
 
@@ -58,8 +55,7 @@ async function track(orderId: string, notFoundTimeoutMs = 120_000) {
     });
     if (res.ok) {
       const transfer = await res.json();
-      const { isTerminal, finalized } = transfer.status;
-      if (isTerminal && finalized) return transfer;
+      if (transfer.status.isTerminal) return transfer;
     } else if (res.status === 404) {
       // Give up if the transfer stays unknown
       if (Date.now() - start > notFoundTimeoutMs) throw new Error(`transfer ${orderId} not found`);
