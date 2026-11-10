@@ -2,16 +2,16 @@
 
 Use this skill when a codebase still calls Across V4 or its Swap API family,
 which are deprecated and must not be used, and the user wants to move to the
-Across API (`https://api.across.to/v1`). Work through the steps in order. The
+Across API (`https://api.across-protocol.xyz/v1`). Work through the steps in order. The
 goal is zero legacy calls left, not a mix of old and new.
 
 ## Step 0: API key first
 
 Before changing any code, the user needs an API key from
-**https://dashboard.across.to**. The legacy `integratorId` does not carry
+**https://dashboard.across-protocol.xyz**. The legacy `integratorId` does not carry
 over; the key alone identifies the integration.
 
-1. Sign up at https://dashboard.across.to and create an organization and an
+1. Sign up at https://dashboard.across-protocol.xyz and create an organization and an
    integration.
 2. Open **API keys**, create a key and copy it. It is shown once.
 3. Store it server-side (secrets manager or environment variable, for example
@@ -19,7 +19,7 @@ over; the key alone identifies the integration.
 4. Check it works:
    ```bash
    curl -H "Authorization: Bearer $ACROSS_API_KEY" \
-     "https://api.across.to/v1/capabilities?originChainId=42161&destinationChainId=8453&include=tokens"
+     "https://api.across-protocol.xyz/v1/capabilities?originChainId=42161&destinationChainId=8453&include=tokens"
    ```
    A `401` means the key is missing, wrong, revoked or expired.
 
@@ -32,7 +32,7 @@ Search the codebase for these. Each hit must be migrated or removed.
 
 | Search for | What it is |
 |---|---|
-| `app.across.to/api`, `across.to/api`, `testnet.across.to` | Legacy hosts |
+| `app.across.to/api`, `across.to/api`, `testnet.across.to`, and the same hosts on `across-protocol.xyz` | Legacy hosts |
 | `/swap/approval`, `/swap/chains`, `/swap/tokens`, `/swap/sources`, `/swap/gasless`, `/gasless/submit`, `/swap/counterfactual` | Swap API |
 | `/suggested-fees`, `/limits`, `/available-routes` | Legacy quote and route endpoints |
 | `/deposit/status`, `/deposit?`, `/deposits` | Legacy tracking |
@@ -44,7 +44,8 @@ Search the codebase for these. Each hit must be migrated or removed.
 Example search:
 
 ```bash
-rg -n -e 'across\.to/api' -e '/swap/(approval|chains|tokens|sources|gasless|counterfactual)' \
+rg -n -e 'across\.to/api' -e 'across-protocol\.xyz/api' \
+  -e '/swap/(approval|chains|tokens|sources|gasless|counterfactual)' \
   -e 'suggested-fees' -e '/available-routes' -e '/limits' -e '/deposit(/status|s)?\b' \
   -e 'gasless/submit' -e 'deposit-addresses' -e 'webhooks/subscriptions' \
   -e '@across-protocol/app-sdk' -e 'depositV3' -e 'integratorId' -e 'tradeType'
@@ -65,7 +66,7 @@ editing.
 | Destination contract calls | `POST /swap/approval` with an `actions` body | `destinationActions` on `POST /v1/quotes` (EVM to EVM only) |
 | Track one transfer | `GET /deposit/status`, `GET /deposit` | `GET /v1/transfers/{orderId}` |
 | List transfers | `GET /deposits` | `GET /v1/transfers` |
-| Transfer notifications | `POST /v1/webhooks/subscriptions` | Configure webhooks in https://dashboard.across.to |
+| Transfer notifications | `POST /v1/webhooks/subscriptions` | Configure webhooks in https://dashboard.across-protocol.xyz |
 | Build deposits through an SDK or contract calls | `@across-protocol/app-sdk`, SpokePool `depositV3` | `POST /v1/quotes` + `nextActions` |
 
 `GET /v1/capabilities` renames `inputToken` / `outputToken` to `originToken` /
@@ -129,7 +130,7 @@ Legacy (remove):
 
 ```ts
 const q = await fetch(
-  `https://app.across.to/api/swap/approval?tradeType=exactInput&amount=1000000` +
+  `https://app.across-protocol.xyz/api/swap/approval?tradeType=exactInput&amount=1000000` +
     `&inputToken=${USDC_ARB}&originChainId=42161&outputToken=${USDC_BASE}` +
     `&destinationChainId=8453&depositor=${user}&integratorId=0xdead&slippage=auto`,
 ).then((r) => r.json());
@@ -141,10 +142,10 @@ const hash = await wallet.sendTransaction(q.swapTx);
 Across API:
 
 ```ts
-const quote = await fetch("https://api.across.to/v1/quotes", {
+const quote = await fetch("https://api.across-protocol.xyz/v1/quotes", {
   method: "POST",
   headers: {
-    Authorization: `Bearer ${process.env.ACROSS_API_KEY}`, // from dashboard.across.to
+    Authorization: `Bearer ${process.env.ACROSS_API_KEY}`, // from dashboard.across-protocol.xyz
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
@@ -163,7 +164,7 @@ const quote = await fetch("https://api.across.to/v1/quotes", {
 ## Step 6: Verify
 
 - [ ] The Step 1 search returns no hits.
-- [ ] Every request goes to `https://api.across.to/v1/...` with
+- [ ] Every request goes to `https://api.across-protocol.xyz/v1/...` with
       `Authorization: Bearer <key>`, from the server.
 - [ ] `integratorId`, `tradeType`, `slippage` and `appFeeRecipient` are gone.
 - [ ] Token addresses and decimals come from `GET /v1/capabilities`.
@@ -178,6 +179,6 @@ const quote = await fetch("https://api.across.to/v1/quotes", {
 - Never fall back to a legacy endpoint during or after the migration, even for
   a feature that seems missing. If something has no Across API equivalent, say
   so and ask the user.
-- Legacy behaviour is documented at https://legacy.docs.across.to, for reading
+- Legacy behaviour is documented at https://legacy-docs.across-protocol.xyz, for reading
   existing code only. Do not build anything new from it.
-- Public guide: https://docs.across.to/introduction/migration-guide
+- Public guide: https://docs.across-protocol.xyz/introduction/migration-guide

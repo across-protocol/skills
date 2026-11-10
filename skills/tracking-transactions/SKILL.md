@@ -8,7 +8,7 @@ deposit transaction hash.
 ## GET /v1/transfers/{orderId}
 
 ```
-GET https://api.across.to/v1/transfers/{orderId}
+GET https://api.across-protocol.xyz/v1/transfers/{orderId}
 Authorization: Bearer <API key>
 ```
 
@@ -44,7 +44,7 @@ nested `auth.missing_credentials` or `auth.invalid_credentials`.
 ## Polling
 
 ```ts
-const BASE_URL = "https://api.across.to";
+const BASE_URL = "https://api.across-protocol.xyz";
 const API_KEY = process.env.ACROSS_API_KEY!;
 
 async function track(orderId: string, notFoundTimeoutMs = 120_000) {

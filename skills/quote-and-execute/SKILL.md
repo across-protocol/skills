@@ -10,9 +10,9 @@ A quote is an offer, not a commitment. Never use legacy endpoints for any of
 this (see [SKILL.md](../SKILL.md#rule-zero-use-only-these-endpoints)).
 
 ## Base URL and auth
-- `https://api.across.to`
+- `https://api.across-protocol.xyz`
 - `Authorization: Bearer <API key>`, `Content-Type: application/json`. Get the
-  key from https://dashboard.across.to before you start
+  key from https://dashboard.across-protocol.xyz before you start
 - The body is strict: an unrecognised field returns `400 request.unsupported_param`.
 
 ## POST /v1/quotes
@@ -113,8 +113,8 @@ import { createWalletClient, createPublicClient, http, erc20Abi } from "viem";
 import { arbitrum } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
-const BASE_URL = "https://api.across.to";
-const API_KEY = process.env.ACROSS_API_KEY!; // from dashboard.across.to, server-side only
+const BASE_URL = "https://api.across-protocol.xyz";
+const API_KEY = process.env.ACROSS_API_KEY!; // from dashboard.across-protocol.xyz, server-side only
 const USDC_ARBITRUM = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
 const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
 const wallet = createWalletClient({ account, chain: arbitrum, transport: http() });

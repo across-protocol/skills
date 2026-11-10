@@ -3,20 +3,20 @@
 Use this checklist when building or reviewing an Across API integration.
 
 ## Endpoints
-- [ ] Only `https://api.across.to` with `/v1/capabilities`, `/v1/quotes`,
+- [ ] Only `https://api.across-protocol.xyz` with `/v1/capabilities`, `/v1/quotes`,
       `/v1/quotes/{orderId}/executions` and `/v1/transfers`. No legacy APIs
       (the search in [migration](../migration/SKILL.md) returns no hits).
 - [ ] No hand-built Across contract calls; only the quote's `nextActions`.
 
 ## API keys
-- [ ] The key comes from https://dashboard.across.to, created before the
+- [ ] The key comes from https://dashboard.across-protocol.xyz, created before the
       integration or migration starts.
 - [ ] The key is used only server-side. Browser and mobile clients call your
       backend, never the Across API with the key.
 - [ ] The key is in a secrets manager, never in source control, logs or error
       messages.
 - [ ] Separate keys per service or environment, so one can be rotated or
-      revoked in https://dashboard.across.to without touching the others.
+      revoked in https://dashboard.across-protocol.xyz without touching the others.
 - [ ] `401` (missing, wrong, revoked or expired key) and `429` are handled.
 
 ## Quotes
