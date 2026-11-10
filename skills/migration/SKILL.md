@@ -32,7 +32,8 @@ Search the codebase for these. Each hit must be migrated or removed.
 
 | Search for | What it is |
 |---|---|
-| `app.across.to/api`, `across.to/api`, `testnet.across.to`, and the same hosts on `across-protocol.xyz` | Legacy hosts |
+| `across.to`, any host (`api.`, `app.`, `testnet.`) | Retired domain. Move every hit to `across-protocol.xyz`, even V5 calls: `api.across.to` becomes `api.across-protocol.xyz` |
+| `app.across-protocol.xyz/api`, `across-protocol.xyz/api`, `testnet.across-protocol.xyz` | Legacy hosts |
 | `/swap/approval`, `/swap/chains`, `/swap/tokens`, `/swap/sources`, `/swap/gasless`, `/gasless/submit`, `/swap/counterfactual` | Swap API |
 | `/suggested-fees`, `/limits`, `/available-routes` | Legacy quote and route endpoints |
 | `/deposit/status`, `/deposit?`, `/deposits` | Legacy tracking |
@@ -44,7 +45,7 @@ Search the codebase for these. Each hit must be migrated or removed.
 Example search:
 
 ```bash
-rg -n -e 'across\.to/api' -e 'across-protocol\.xyz/api' \
+rg -n -e 'across\.to\b' -e 'across-protocol\.xyz/api' -e 'testnet\.across-protocol\.xyz' \
   -e '/swap/(approval|chains|tokens|sources|gasless|counterfactual)' \
   -e 'suggested-fees' -e '/available-routes' -e '/limits' -e '/deposit(/status|s)?\b' \
   -e 'gasless/submit' -e 'deposit-addresses' -e 'webhooks/subscriptions' \
