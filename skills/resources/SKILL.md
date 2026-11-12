@@ -17,7 +17,6 @@
 | `GET /v1/transfers` | https://docs.across.to/api-reference/v1/transfers/get |
 
 ## Guides
-- Get an API key: https://docs.across.to/introduction/api-keys
 - Quickstart: https://docs.across.to/introduction/quickstart
 - Migration guide (legacy APIs → Across API): https://docs.across.to/introduction/migration-guide
 - Destination actions: https://docs.across.to/introduction/quickstart/destination-actions
