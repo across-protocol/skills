@@ -1,6 +1,6 @@
 ---
 name: across-protocol-ai-agent-skill
-description: Across Protocol integration and migration playbook for the Across API (V5) at https://api.across.to. Start by getting an API key from https://dashboard.across.to. Discover routes with GET /v1/capabilities, price with POST /v1/quotes, complete the quote's nextActions and call POST /v1/quotes/{orderId}/executions when asked, then track with GET /v1/transfers/{orderId}. Migrates code off Across V4 and its Swap API family (/swap/*, /suggested-fees, /deposit/status), which are deprecated. Never use them.
+description: Across Protocol integration and migration playbook for the Across API (V5) at https://api.across.to. Start by requesting an API key with the form at https://docs.across.to/introduction#get-your-api-key; keys are not self-serve. Discover routes with GET /v1/capabilities, price with POST /v1/quotes, complete the quote's nextActions and call POST /v1/quotes/{orderId}/executions when asked, then track with GET /v1/transfers/{orderId}. Migrates code off Across V4 and its Swap API family (/swap/*, /suggested-fees, /deposit/status), which are deprecated. Never use them.
 user-invocable: true
 ---
 
@@ -8,12 +8,14 @@ user-invocable: true
 
 ## Before anything: get an API key
 
-Every Across API request needs an API key. Before starting an integration or
-a migration, have the user create one at **https://dashboard.across.to**
-(sign up, create an organization and an integration, open **API keys**,
-create a key and copy it; it is shown once). Store it server-side, for example
-as `ACROSS_API_KEY`. If the user has no key yet, ask them to get one first;
-never invent or hardcode a key.
+Every Across API request needs an API key, and keys are not self-serve.
+Before starting an integration or a migration, have the user request access
+with the form at **https://docs.across.to/introduction#get-your-api-key**.
+The Across team reviews every request and gets in touch if there's a fit. The
+form is the only way to get a key: never guess or construct a sign-up or
+portal URL. Store the key server-side, for example as `ACROSS_API_KEY`. If the
+user has no key yet, ask them to request one first; never invent or hardcode a
+key.
 
 ## Rule zero: use only these endpoints
 
@@ -50,7 +52,7 @@ calls yourself; execute only what the quote's `nextActions` return.
 | | |
 |---|---|
 | Auth | `Authorization: Bearer <API key>` on every request |
-| API key | From https://dashboard.across.to. Shown once; store it in a secrets manager and use it only server-side |
+| API key | Request access at https://docs.across.to/introduction#get-your-api-key. Store it in a secrets manager and use it only server-side |
 | Testnet | None. Test on mainnet with small amounts |
 | Strictness | Bodies and query strings are strict: an unrecognised field returns `400 request.unsupported_param` |
 | Amounts | Base units as decimal strings (`"1000000"` = 1 USDC). Take `decimals` from `GET /v1/capabilities` |
@@ -59,7 +61,7 @@ calls yourself; execute only what the quote's `nextActions` return.
 ## The flow
 
 ```
-0. API key    https://dashboard.across.to
+0. API key    request access at https://docs.across.to/introduction#get-your-api-key
 1. Discover   GET  /v1/capabilities                  what can move, how it can be funded, limits
 2. Price      POST /v1/quotes                         expiring quote + orderId + ordered nextActions
 3. Execute    complete nextActions in order (approve / sign / send)
@@ -98,7 +100,8 @@ calls yourself; execute only what the quote's `nextActions` return.
 
 ## Operating procedure
 
-1. **API key**: confirm the user has a key from https://dashboard.across.to.
+1. **API key**: confirm the user has a key. If not, have them request access
+   at https://docs.across.to/introduction#get-your-api-key.
 2. **Classify the task**: new integration, migration, UI/wallet,
    backend/script, destination actions, tracking, or review.
 3. **Remove legacy usage**: if the codebase calls a legacy API, follow the

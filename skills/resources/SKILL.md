@@ -1,8 +1,10 @@
 # Resources and Links
 
 ## Across API
-- API keys: **https://dashboard.across.to**. Get one before starting an
-  integration or migration.
+- API keys: request access with the form at
+  **https://docs.across.to/introduction#get-your-api-key** before starting
+  an integration or migration. The Across team reviews every request and gets
+  in touch if there's a fit.
 - Base URL: `https://api.across.to` (every path starts with `/v1`)
 - Testnet: none. Test on mainnet with small amounts.
 
@@ -15,7 +17,6 @@
 | `GET /v1/transfers` | https://docs.across.to/api-reference/v1/transfers/get |
 
 ## Guides
-- Get an API key: https://docs.across.to/introduction/api-keys
 - Quickstart: https://docs.across.to/introduction/quickstart
 - Migration guide (legacy APIs → Across API): https://docs.across.to/introduction/migration-guide
 - Destination actions: https://docs.across.to/introduction/quickstart/destination-actions
