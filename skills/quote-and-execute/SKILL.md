@@ -11,8 +11,8 @@ this (see [SKILL.md](../SKILL.md#rule-zero-use-only-these-endpoints)).
 
 ## Base URL and auth
 - `https://api.across.to`
-- `Authorization: Bearer <API key>`, `Content-Type: application/json`. Get the
-  key from https://dashboard.across.to before you start
+- `Authorization: Bearer <API key>`, `Content-Type: application/json`. Request
+  access at https://docs.across.to/introduction#get-your-api-key before you start
 - The body is strict: an unrecognised field returns `400 request.unsupported_param`.
 
 ## POST /v1/quotes
@@ -114,7 +114,7 @@ import { arbitrum } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
 const BASE_URL = "https://api.across.to";
-const API_KEY = process.env.ACROSS_API_KEY!; // from dashboard.across.to, server-side only
+const API_KEY = process.env.ACROSS_API_KEY!; // issued by Across, server-side only
 const USDC_ARBITRUM = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
 const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
 const wallet = createWalletClient({ account, chain: arbitrum, transport: http() });

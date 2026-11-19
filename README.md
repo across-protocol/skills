@@ -4,11 +4,13 @@ Skills that let AI agents integrate Across, the crosschain bridge and swap
 protocol, through the **Across API** (V5) at `https://api.across.to`, and help
 migrate existing integrations off the legacy APIs.
 
-## Start here: get an API key
+## Start here: request an API key
 
-Before starting an Across integration or migration, get an API key from
-**https://dashboard.across.to**. Every request needs it, as
-`Authorization: Bearer <key>`, sent from your server only.
+Every request needs an API key, sent as `Authorization: Bearer <key>` from
+your server only. Keys are not self-serve. Before starting an Across
+integration or migration, request access with the form at
+**https://docs.across.to/introduction#get-your-api-key**. The Across team
+reviews every request and gets in touch if there's a fit.
 
 ## The one rule
 
@@ -51,8 +53,10 @@ chain.
 
 ## Quick start for agents
 
-1. **API key**: get one at https://dashboard.across.to. Use it only
-   server-side, as `Authorization: Bearer <key>`.
+1. **API key**: request access with the form at
+   https://docs.across.to/introduction#get-your-api-key and wait for the
+   Across team to get in touch. Use the key only server-side, as
+   `Authorization: Bearer <key>`.
 2. **Discover**: `GET /v1/capabilities` for chains, tokens, decimals, limits.
 3. **Price**: `POST /v1/quotes` with `origin` and `destination` tokens as
    `{ chainId, address }`, amounts in base units, and `maxFee`.
@@ -70,7 +74,7 @@ There is no testnet. Test on mainnet with small amounts.
 
 | Mistake | Correct approach |
 |---------|-----------------|
-| Starting without an API key | Get one at https://dashboard.across.to first |
+| Starting without an API key | Request access at https://docs.across.to/introduction#get-your-api-key first |
 | Calling a legacy endpoint | Use only the `/v1` endpoints above |
 | Copying legacy `slippage` into `maxFee` | `maxFee` is a total USD value-loss cap, not slippage; set a bound the user agrees to |
 | Putting the API key in a frontend | Call the Across API from your backend |

@@ -9,14 +9,15 @@ Use this checklist when building or reviewing an Across API integration.
 - [ ] No hand-built Across contract calls; only the quote's `nextActions`.
 
 ## API keys
-- [ ] The key comes from https://dashboard.across.to, created before the
+- [ ] The key was issued by Across, after a request through
+      https://docs.across.to/introduction#get-your-api-key, before the
       integration or migration starts.
 - [ ] The key is used only server-side. Browser and mobile clients call your
       backend, never the Across API with the key.
 - [ ] The key is in a secrets manager, never in source control, logs or error
       messages.
 - [ ] Separate keys per service or environment, so one can be rotated or
-      revoked in https://dashboard.across.to without touching the others.
+      revoked without touching the others.
 - [ ] `401` (missing, wrong, revoked or expired key) and `429` are handled.
 
 ## Quotes

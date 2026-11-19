@@ -7,23 +7,23 @@ goal is zero legacy calls left, not a mix of old and new.
 
 ## Step 0: API key first
 
-Before changing any code, the user needs an API key from
-**https://dashboard.across.to**. The legacy `integratorId` does not carry
-over; the key alone identifies the integration.
+Before changing any code, the user needs an API key. The legacy
+`integratorId` does not carry over; the key alone identifies the integration.
 
-1. Sign up at https://dashboard.across.to and create an organization and an
-   integration.
-2. Open **API keys**, create a key and copy it. It is shown once.
-3. Store it server-side (secrets manager or environment variable, for example
-   `ACROSS_API_KEY`). Never put it in frontend code.
-4. Check it works:
+1. Request access with the form at
+   **https://docs.across.to/introduction#get-your-api-key**. Keys are not
+   self-serve: the Across team reviews every request and gets in touch if
+   there's a fit.
+2. Once the key arrives, store it server-side (secrets manager or environment
+   variable, for example `ACROSS_API_KEY`). Never put it in frontend code.
+3. Check it works:
    ```bash
    curl -H "Authorization: Bearer $ACROSS_API_KEY" \
      "https://api.across.to/v1/capabilities?originChainId=42161&destinationChainId=8453&include=tokens"
    ```
    A `401` means the key is missing, wrong, revoked or expired.
 
-If the user has no key yet, stop here and ask them to create one. Do not
+If the user has no key yet, stop here and ask them to request one. Do not
 invent a placeholder key in committed code.
 
 ## Step 1: Find every legacy call
@@ -65,7 +65,7 @@ editing.
 | Destination contract calls | `POST /swap/approval` with an `actions` body | `destinationActions` on `POST /v1/quotes` (EVM to EVM only) |
 | Track one transfer | `GET /deposit/status`, `GET /deposit` | `GET /v1/transfers/{orderId}` |
 | List transfers | `GET /deposits` | `GET /v1/transfers` |
-| Transfer notifications | `POST /v1/webhooks/subscriptions` | Configure webhooks in https://dashboard.across.to |
+| Transfer notifications | `POST /v1/webhooks/subscriptions` | Configure webhooks in the integrator portal, which Across shares with approved teams |
 | Build deposits through an SDK or contract calls | `@across-protocol/app-sdk`, SpokePool `depositV3` | `POST /v1/quotes` + `nextActions` |
 
 `GET /v1/capabilities` renames `inputToken` / `outputToken` to `originToken` /
@@ -144,7 +144,7 @@ Across API:
 const quote = await fetch("https://api.across.to/v1/quotes", {
   method: "POST",
   headers: {
-    Authorization: `Bearer ${process.env.ACROSS_API_KEY}`, // from dashboard.across.to
+    Authorization: `Bearer ${process.env.ACROSS_API_KEY}`, // issued by Across, server-side only
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
